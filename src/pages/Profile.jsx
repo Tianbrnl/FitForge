@@ -11,7 +11,6 @@ import {
   Check,
   AlertCircle,
   Loader2,
-  LogOut
 } from 'lucide-react';
 import Card from '../components/common/Card';
 import Button from '../components/common/Button';
@@ -60,78 +59,81 @@ export default function Profile() {
     experienceLevel: EXPERIENCE_OPTIONS[0]
   });
 
-  const [isLoggingOut, setIsLoggingOut] = useState(false);
-  const { signOut } = useAuth();
+  const { user: authUser, loading: authLoading, refreshProfile } = useAuth();
   const navigate = useNavigate();
-
-  const handleLogout = async () => {
-    setIsLoggingOut(true);
-    await signOut();
-    setIsLoggingOut(false);
-    navigate('/login');
-  };
 
   useEffect(() => {
     let isMounted = true;
 
-    const fetchProfile = async () => {
-      const {
-        data: { user },
-        error: userError
-      } = await supabase.auth.getUser();
+    if (authLoading) return;
 
-      if (!isMounted) return;
+    if (!authUser) {
+      navigate('/login');
+      return;
+    }
 
-      if (userError || !user) {
-        setErrorMsg('Unable to get your account information.');
-        setIsLoading(false);
-        return;
+    const loadProfileData = async () => {
+      setIsLoading(true);
+      setErrorMsg('');
+
+      try {
+        // Query profiles table safely with maybeSingle() so missing rows don't cause an error
+        const { data, error } = await supabase
+          .from('profiles')
+          .select('*')
+          .eq('id', authUser.id)
+          .maybeSingle();
+
+        if (!isMounted) return;
+
+        if (error && error.code !== 'PGRST116') {
+          console.warn('Profile fetch note:', error.message);
+        }
+
+        // Construct athlete profile using profile table data with fallbacks to auth metadata & email
+        const resolvedName =
+          data?.full_name ||
+          authUser.user_metadata?.full_name ||
+          authUser.email?.split('@')[0] ||
+          'Athlete';
+
+        const profile = {
+          name: resolvedName,
+          email: authUser.email || '',
+          age: data?.age ?? '',
+          height: data?.height ?? '',
+          weight: data?.weight ?? '',
+          activityLevel: data?.activity_level || '',
+          experienceLevel: data?.experience_level || '',
+          joinedDate: authUser.created_at
+            ? new Date(authUser.created_at).toLocaleDateString()
+            : 'Recently'
+        };
+
+        setUserData(profile);
+        setFormData({
+          name: profile.name,
+          age: profile.age,
+          height: profile.height,
+          weight: profile.weight,
+          activityLevel: profile.activityLevel || ACTIVITY_OPTIONS[0],
+          experienceLevel: profile.experienceLevel || EXPERIENCE_OPTIONS[0]
+        });
+      } catch (err) {
+        console.error('Error fetching athlete profile:', err);
+      } finally {
+        if (isMounted) {
+          setIsLoading(false);
+        }
       }
-
-      const { data, error } = await supabase
-        .from('profiles')
-        .select('*')
-        .eq('id', user.id)
-        .single();
-
-      if (!isMounted) return;
-
-      if (error) {
-        setErrorMsg(error.message);
-        setIsLoading(false);
-        return;
-      }
-
-      const profile = {
-        name: data.full_name || '',
-        email: user.email || '',
-        age: data.age ?? '',
-        height: data.height ?? '',
-        weight: data.weight ?? '',
-        activityLevel: data.activity_level || '',
-        experienceLevel: data.experience_level || '',
-        joinedDate: new Date(user.created_at).toLocaleDateString()
-      };
-
-      setUserData(profile);
-      setFormData({
-        name: profile.name,
-        age: profile.age,
-        height: profile.height,
-        weight: profile.weight,
-        activityLevel: profile.activityLevel || ACTIVITY_OPTIONS[0],
-        experienceLevel: profile.experienceLevel || EXPERIENCE_OPTIONS[0]
-      });
-
-      setIsLoading(false);
     };
 
-    fetchProfile();
+    loadProfileData();
 
     return () => {
       isMounted = false;
     };
-  }, []);
+  }, [authUser, authLoading, navigate]);
 
   const handleSaveProfile = async (e) => {
     e.preventDefault();
@@ -162,24 +164,21 @@ export default function Profile() {
       }
     }
 
-    setIsSaving(true);
-
-    const {
-      data: { user }
-    } = await supabase.auth.getUser();
-
-    if (!user) {
+    if (!authUser) {
       setErrorMsg('You are not logged in.');
-      setIsSaving(false);
       return;
     }
+
+    setIsSaving(true);
 
     const resolvedActivity = formData.activityLevel || ACTIVITY_OPTIONS[0];
     const resolvedExperience = formData.experienceLevel || EXPERIENCE_OPTIONS[0];
 
+    // Use upsert so that if the profile row doesn't exist yet, it is created
     const { data, error } = await supabase
       .from('profiles')
-      .update({
+      .upsert({
+        id: authUser.id,
         full_name: formData.name,
         age: formData.age !== '' && formData.age !== null ? Number(formData.age) : null,
         height: formData.height !== '' && formData.height !== null ? Number(formData.height) : null,
@@ -187,9 +186,8 @@ export default function Profile() {
         activity_level: resolvedActivity,
         experience_level: resolvedExperience
       })
-      .eq('id', user.id)
       .select()
-      .single();
+      .maybeSingle();
 
     if (error) {
       setErrorMsg(error.message);
@@ -197,14 +195,26 @@ export default function Profile() {
       return;
     }
 
+    // Also update auth user metadata if name changed
+    try {
+      await supabase.auth.updateUser({
+        data: { full_name: formData.name }
+      });
+      if (refreshProfile) {
+        await refreshProfile();
+      }
+    } catch (metaErr) {
+      console.warn('Could not update auth user metadata:', metaErr);
+    }
+
     setUserData((prev) => ({
       ...prev,
-      name: data.full_name || '',
-      age: data.age ?? '',
-      height: data.height ?? '',
-      weight: data.weight ?? '',
-      activityLevel: data.activity_level || resolvedActivity,
-      experienceLevel: data.experience_level || resolvedExperience
+      name: data?.full_name || formData.name,
+      age: data?.age ?? (formData.age !== '' ? Number(formData.age) : ''),
+      height: data?.height ?? (formData.height !== '' ? Number(formData.height) : ''),
+      weight: data?.weight ?? (formData.weight !== '' ? Number(formData.weight) : ''),
+      activityLevel: data?.activity_level || resolvedActivity,
+      experienceLevel: data?.experience_level || resolvedExperience
     }));
 
     setIsSaving(false);
@@ -255,15 +265,7 @@ export default function Profile() {
             <span>Edit Profile</span>
           </Button>
 
-          <Button
-            variant="danger"
-            onClick={handleLogout}
-            disabled={isLoggingOut}
-            className="gap-2"
-          >
-            <LogOut size={16} />
-            <span>{isLoggingOut ? 'Logging out...' : 'Log Out'}</span>
-          </Button>
+
         </div>
       </div>
 
