@@ -72,11 +72,26 @@ export default function Register() {
     setIsLoading(false);
 
     if (error) {
-      setErrorMsg(error.message);
+      if (
+        error.message?.toLowerCase().includes('already registered') ||
+        error.message?.toLowerCase().includes('already in use') ||
+        error.message?.toLowerCase().includes('already exists')
+      ) {
+        setErrorMsg('This email is already registered. Please sign in instead.');
+      } else {
+        setErrorMsg(error.message);
+      }
       return;
     }
 
-    if (data.user) {
+    // In Supabase Auth, when email enumeration protection or email confirmation is enabled,
+    // an existing user signup returns data.user with an empty identities array ([]).
+    if (data?.user && Array.isArray(data.user.identities) && data.user.identities.length === 0) {
+      setErrorMsg('This email is already registered. Please sign in instead.');
+      return;
+    }
+
+    if (data?.user) {
       navigate('/dashboard');
     }
   };
@@ -129,9 +144,21 @@ export default function Register() {
       </div>
 
       {errorMsg && (
-        <div className="flex items-center gap-2 p-3 bg-red-500/10 border border-red-500/25 rounded-xl text-red-400 text-xs mb-4">
-          <AlertCircle size={16} className="shrink-0" />
-          <span>{errorMsg}</span>
+        <div className="flex items-start gap-2.5 p-3 bg-red-500/10 border border-red-500/25 rounded-xl text-red-400 text-xs mb-4">
+          <AlertCircle size={16} className="shrink-0 mt-0.5" />
+          <div className="flex-1 leading-relaxed">
+            <span>{errorMsg}</span>
+            {errorMsg.toLowerCase().includes('already registered') && (
+              <div className="mt-1.5">
+                <Link
+                  to="/login"
+                  className="inline-flex items-center text-[#CCFF00] font-bold hover:underline"
+                >
+                  Sign in to your account &rarr;
+                </Link>
+              </div>
+            )}
+          </div>
         </div>
       )}
 
