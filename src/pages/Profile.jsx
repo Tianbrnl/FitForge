@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { useNavigate } from 'react-router-dom';
 import {
   Mail,
   Calendar,
@@ -9,7 +10,8 @@ import {
   Edit3,
   Check,
   AlertCircle,
-  Loader2
+  Loader2,
+  LogOut
 } from 'lucide-react';
 import Card from '../components/common/Card';
 import Button from '../components/common/Button';
@@ -17,6 +19,7 @@ import Modal from '../components/common/Modal';
 import Input from '../components/common/Input';
 import Avatar from '../components/common/Avatar';
 import { supabase } from '../services/supabase';
+import { useAuth } from '../context/AuthContext';
 
 const ACTIVITY_OPTIONS = [
   'Sedentary (Little/no exercise)',
@@ -56,6 +59,17 @@ export default function Profile() {
     activityLevel: ACTIVITY_OPTIONS[0],
     experienceLevel: EXPERIENCE_OPTIONS[0]
   });
+
+  const [isLoggingOut, setIsLoggingOut] = useState(false);
+  const { signOut } = useAuth();
+  const navigate = useNavigate();
+
+  const handleLogout = async () => {
+    setIsLoggingOut(true);
+    await signOut();
+    setIsLoggingOut(false);
+    navigate('/login');
+  };
 
   useEffect(() => {
     let isMounted = true;
@@ -219,26 +233,38 @@ export default function Profile() {
           </h1>
         </div>
 
-        <Button
-          variant="secondary"
-          onClick={() => {
-            setErrorMsg('');
-            setFormData({
-              name: userData.name || '',
-              age: userData.age ?? '',
-              height: userData.height ?? '',
-              weight: userData.weight ?? '',
-              activityLevel: userData.activityLevel || ACTIVITY_OPTIONS[0],
-              experienceLevel: userData.experienceLevel || EXPERIENCE_OPTIONS[0]
-            });
+        <div className="flex items-center gap-3">
+          <Button
+            variant="secondary"
+            onClick={() => {
+              setErrorMsg('');
+              setFormData({
+                name: userData.name || '',
+                age: userData.age ?? '',
+                height: userData.height ?? '',
+                weight: userData.weight ?? '',
+                activityLevel: userData.activityLevel || ACTIVITY_OPTIONS[0],
+                experienceLevel: userData.experienceLevel || EXPERIENCE_OPTIONS[0]
+              });
 
-            setEditModalOpen(true);
-          }}
-          className="gap-2"
-        >
-          <Edit3 size={16} />
-          <span>Edit Profile</span>
-        </Button>
+              setEditModalOpen(true);
+            }}
+            className="gap-2"
+          >
+            <Edit3 size={16} />
+            <span>Edit Profile</span>
+          </Button>
+
+          <Button
+            variant="danger"
+            onClick={handleLogout}
+            disabled={isLoggingOut}
+            className="gap-2"
+          >
+            <LogOut size={16} />
+            <span>{isLoggingOut ? 'Logging out...' : 'Log Out'}</span>
+          </Button>
+        </div>
       </div>
 
       {/* Main Profile Identity Card */}
