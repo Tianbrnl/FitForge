@@ -19,10 +19,13 @@ import Profile from './pages/Profile';
 import Login from './pages/Login';
 import Register from './pages/Register';
 
+import { AuthProvider } from './context/AuthContext';
+
 export default function App() {
   return (
     <BrowserRouter>
-      <Routes>
+      <AuthProvider>
+        <Routes>
         {/* Main Application with Floating Pill Nav & Persistent AI Assistant */}
         <Route element={<MainLayout />}>
           <Route path="/" element={<Home />} />
@@ -44,7 +47,8 @@ export default function App() {
           <Route path="/login" element={<Login />} />
           <Route path="/register" element={<Register />} />
         </Route>
-      </Routes>
+        </Routes>
+      </AuthProvider>
     </BrowserRouter>
   );
 }

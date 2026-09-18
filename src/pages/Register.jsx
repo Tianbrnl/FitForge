@@ -1,11 +1,14 @@
 import React, { useState, useMemo } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
-import { User, Mail, Lock, Eye, EyeOff, AlertCircle } from 'lucide-react';
+import { User, Mail, Lock, Eye, EyeOff, AlertCircle, LogOut, CheckCircle2 } from 'lucide-react';
 import Button from '../components/common/Button';
 import Input from '../components/common/Input';
 import { supabase } from '../services/supabase';
+import { useAuth } from '../context/AuthContext';
+
 export default function Register() {
   const navigate = useNavigate();
+  const { user, profile, signOut } = useAuth();
   const [name, setName] = useState('');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
@@ -77,6 +80,42 @@ export default function Register() {
       navigate('/dashboard');
     }
   };
+
+  if (user) {
+    return (
+      <div className="text-center py-2">
+        <div className="w-14 h-14 rounded-2xl bg-[#CCFF00]/10 border border-[#CCFF00]/30 text-[#CCFF00] flex items-center justify-center mx-auto mb-4 shadow-[0_0_20px_rgba(204,255,0,0.2)]">
+          <CheckCircle2 size={28} />
+        </div>
+        <h2 className="text-2xl font-black text-white tracking-tight mb-1">
+          Already Signed In
+        </h2>
+        <p className="text-sm text-gray-400 mb-6">
+          You are currently signed in as{' '}
+          <span className="text-[#CCFF00] font-semibold">{profile?.full_name || user.email}</span>.
+        </p>
+        <div className="flex flex-col gap-3">
+          <Button
+            variant="primary"
+            className="w-full"
+            onClick={() => navigate('/dashboard')}
+          >
+            Continue to Dashboard
+          </Button>
+          <Button
+            variant="danger"
+            className="w-full flex items-center justify-center gap-2"
+            onClick={async () => {
+              await signOut();
+            }}
+          >
+            <LogOut size={16} />
+            <span>Sign Out</span>
+          </Button>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div>

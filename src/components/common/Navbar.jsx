@@ -9,12 +9,24 @@ import {
   User, 
   Flame,
   LogIn,
+  LogOut,
   X
 } from 'lucide-react';
+import { useAuth } from '../../context/AuthContext';
+import Avatar from './Avatar';
 
 export default function Navbar() {
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+  const [isLoggingOut, setIsLoggingOut] = useState(false);
   const navigate = useNavigate();
+  const { user, profile, signOut } = useAuth();
+
+  const handleLogout = async () => {
+    setIsLoggingOut(true);
+    await signOut();
+    setIsLoggingOut(false);
+    navigate('/login');
+  };
 
   const navItems = [
     { label: 'Home', path: '/', icon: Home },
@@ -62,15 +74,43 @@ export default function Navbar() {
             })}
           </div>
 
-          {/* Login Action */}
-          <div className="flex items-center pl-2 ml-1 border-l border-white/10">
-            <Link
-              to="/login"
-              className="inline-flex items-center gap-1.5 px-4 py-1.5 rounded-full bg-white/10 hover:bg-white/20 text-xs font-semibold text-white transition duration-200 active:scale-95"
-            >
-              <LogIn size={14} />
-              <span>Login</span>
-            </Link>
+          {/* Auth Action */}
+          <div className="flex items-center pl-2 ml-1 border-l border-white/10 gap-2">
+            {user ? (
+              <div className="flex items-center gap-2">
+                <Link
+                  to="/profile"
+                  className="flex items-center gap-2 py-1 px-2 rounded-full hover:bg-white/5 transition duration-150 group"
+                  title="View Profile"
+                >
+                  <Avatar
+                    name={profile?.full_name || user.user_metadata?.full_name || user.email || 'Athlete'}
+                    size="sm"
+                    className="w-7 h-7 text-[11px]"
+                  />
+                  <span className="text-xs font-semibold text-gray-300 group-hover:text-white max-w-[100px] truncate hidden lg:inline-block">
+                    {profile?.full_name || user.user_metadata?.full_name || user.email?.split('@')[0]}
+                  </span>
+                </Link>
+                <button
+                  onClick={handleLogout}
+                  disabled={isLoggingOut}
+                  className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-red-500/10 hover:bg-red-500/20 text-red-400 hover:text-red-300 border border-red-500/25 text-xs font-semibold transition duration-200 active:scale-95 cursor-pointer disabled:opacity-50"
+                  title="Sign out of your account"
+                >
+                  <LogOut size={13} />
+                  <span>{isLoggingOut ? 'Logging out...' : 'Logout'}</span>
+                </button>
+              </div>
+            ) : (
+              <Link
+                to="/login"
+                className="inline-flex items-center gap-1.5 px-4 py-1.5 rounded-full bg-white/10 hover:bg-white/20 text-xs font-semibold text-white transition duration-200 active:scale-95"
+              >
+                <LogIn size={14} />
+                <span>Login</span>
+              </Link>
+            )}
           </div>
         </div>
       </nav>
@@ -163,18 +203,51 @@ export default function Navbar() {
               })}
             </div>
 
-            {/* Drawer Footer Auth Button */}
+            {/* Drawer Footer Auth Section */}
             <div className="mt-auto pt-4 border-t border-white/10">
-              <button
-                onClick={() => {
-                  setMobileMenuOpen(false);
-                  navigate('/login');
-                }}
-                className="w-full py-3 px-4 rounded-xl bg-[#CCFF00] hover:bg-[#b5e600] text-gray-950 font-bold text-sm flex items-center justify-center gap-2 shadow-[0_0_15px_rgba(204,255,0,0.3)] transition duration-150 cursor-pointer"
-              >
-                <LogIn size={16} />
-                <span>Sign In</span>
-              </button>
+              {user ? (
+                <div className="flex flex-col gap-3">
+                  <Link
+                    to="/profile"
+                    onClick={() => setMobileMenuOpen(false)}
+                    className="flex items-center gap-3 p-2.5 rounded-2xl bg-white/5 hover:bg-white/10 border border-white/10 transition duration-150"
+                  >
+                    <Avatar
+                      name={profile?.full_name || user.user_metadata?.full_name || user.email || 'Athlete'}
+                      size="md"
+                    />
+                    <div className="flex flex-col min-w-0">
+                      <span className="text-sm font-bold text-white truncate">
+                        {profile?.full_name || user.user_metadata?.full_name || 'Athlete'}
+                      </span>
+                      <span className="text-xs text-gray-400 truncate">{user.email}</span>
+                    </div>
+                  </Link>
+
+                  <button
+                    onClick={() => {
+                      setMobileMenuOpen(false);
+                      handleLogout();
+                    }}
+                    disabled={isLoggingOut}
+                    className="w-full py-3 px-4 rounded-xl bg-red-500/15 hover:bg-red-500/25 border border-red-500/30 text-red-400 font-bold text-sm flex items-center justify-center gap-2 transition duration-150 cursor-pointer disabled:opacity-50"
+                  >
+                    <LogOut size={16} />
+                    <span>{isLoggingOut ? 'Logging out...' : 'Log Out'}</span>
+                  </button>
+                </div>
+              ) : (
+                <button
+                  onClick={() => {
+                    setMobileMenuOpen(false);
+                    navigate('/login');
+                  }}
+                  className="w-full py-3 px-4 rounded-xl bg-[#CCFF00] hover:bg-[#b5e600] text-gray-950 font-bold text-sm flex items-center justify-center gap-2 shadow-[0_0_15px_rgba(204,255,0,0.3)] transition duration-150 cursor-pointer"
+                >
+                  <LogIn size={16} />
+                  <span>Sign In</span>
+                </button>
+              )}
             </div>
           </div>
         </div>
