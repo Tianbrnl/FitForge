@@ -1,47 +1,210 @@
-import React, { useState } from 'react';
-import { 
-  Mail, 
-  Calendar, 
-  Flame, 
-  Dumbbell, 
-  Scale, 
-  Ruler, 
-  Edit3, 
-  Check 
+import React, { useState, useEffect } from 'react';
+import {
+  Mail,
+  Calendar,
+  Flame,
+  Dumbbell,
+  Scale,
+  Ruler,
+  Edit3,
+  Check,
+  AlertCircle,
+  Loader2
 } from 'lucide-react';
 import Card from '../components/common/Card';
 import Button from '../components/common/Button';
 import Modal from '../components/common/Modal';
 import Input from '../components/common/Input';
 import Avatar from '../components/common/Avatar';
-import { initialUserData } from '../data/user';
-import { useLocalStorage } from '../hooks/useLocalStorage';
+import { supabase } from '../services/supabase';
+
+const ACTIVITY_OPTIONS = [
+  'Sedentary (Little/no exercise)',
+  'Moderate (2-3 days/week)',
+  'Very Active (4-5 days/week)',
+  'Elite (6+ days/week)'
+];
+
+const EXPERIENCE_OPTIONS = [
+  'Beginner (< 1 year)',
+  'Intermediate (1-3 years)',
+  'Advanced (3+ years)'
+];
 
 export default function Profile() {
-  const [userData, setUserData] = useLocalStorage('fitforge_user', initialUserData);
-  const [editModalOpen, setEditModalOpen] = useState(false);
-
-  const [formData, setFormData] = useState({
-    name: userData.name,
-    age: userData.age,
-    height: userData.height,
-    weight: userData.weight,
-    activityLevel: userData.activityLevel,
-    experienceLevel: userData.experienceLevel
+  const [userData, setUserData] = useState({
+    name: '',
+    email: '',
+    age: '',
+    height: '',
+    weight: '',
+    activityLevel: '',
+    experienceLevel: '',
+    joinedDate: ''
   });
 
-  const handleSaveProfile = (e) => {
+  const [editModalOpen, setEditModalOpen] = useState(false);
+  const [isLoading, setIsLoading] = useState(true);
+  const [isSaving, setIsSaving] = useState(false);
+  const [errorMsg, setErrorMsg] = useState('');
+
+  const [formData, setFormData] = useState({
+    name: '',
+    age: '',
+    height: '',
+    weight: '',
+    activityLevel: ACTIVITY_OPTIONS[0],
+    experienceLevel: EXPERIENCE_OPTIONS[0]
+  });
+
+  useEffect(() => {
+    let isMounted = true;
+
+    const fetchProfile = async () => {
+      const {
+        data: { user },
+        error: userError
+      } = await supabase.auth.getUser();
+
+      if (!isMounted) return;
+
+      if (userError || !user) {
+        setErrorMsg('Unable to get your account information.');
+        setIsLoading(false);
+        return;
+      }
+
+      const { data, error } = await supabase
+        .from('profiles')
+        .select('*')
+        .eq('id', user.id)
+        .single();
+
+      if (!isMounted) return;
+
+      if (error) {
+        setErrorMsg(error.message);
+        setIsLoading(false);
+        return;
+      }
+
+      const profile = {
+        name: data.full_name || '',
+        email: user.email || '',
+        age: data.age ?? '',
+        height: data.height ?? '',
+        weight: data.weight ?? '',
+        activityLevel: data.activity_level || '',
+        experienceLevel: data.experience_level || '',
+        joinedDate: new Date(user.created_at).toLocaleDateString()
+      };
+
+      setUserData(profile);
+      setFormData({
+        name: profile.name,
+        age: profile.age,
+        height: profile.height,
+        weight: profile.weight,
+        activityLevel: profile.activityLevel || ACTIVITY_OPTIONS[0],
+        experienceLevel: profile.experienceLevel || EXPERIENCE_OPTIONS[0]
+      });
+
+      setIsLoading(false);
+    };
+
+    fetchProfile();
+
+    return () => {
+      isMounted = false;
+    };
+  }, []);
+
+  const handleSaveProfile = async (e) => {
     e.preventDefault();
+    setErrorMsg('');
+
+    // Height validation: must be a positive whole integer if provided
+    if (formData.height !== '' && formData.height !== null && formData.height !== undefined) {
+      const numHeight = Number(formData.height);
+      if (isNaN(numHeight) || numHeight <= 0 || !Number.isInteger(numHeight) || numHeight > 300) {
+        setErrorMsg('Please enter a valid height in cm (positive whole number between 1 and 300).');
+        return;
+      }
+    }
+
+    if (formData.age !== '' && formData.age !== null && formData.age !== undefined) {
+      const numAge = Number(formData.age);
+      if (isNaN(numAge) || numAge <= 0 || numAge > 130) {
+        setErrorMsg('Please enter a valid age.');
+        return;
+      }
+    }
+
+    if (formData.weight !== '' && formData.weight !== null && formData.weight !== undefined) {
+      const numWeight = Number(formData.weight);
+      if (isNaN(numWeight) || numWeight <= 0 || numWeight > 500) {
+        setErrorMsg('Please enter a valid weight in kg.');
+        return;
+      }
+    }
+
+    setIsSaving(true);
+
+    const {
+      data: { user }
+    } = await supabase.auth.getUser();
+
+    if (!user) {
+      setErrorMsg('You are not logged in.');
+      setIsSaving(false);
+      return;
+    }
+
+    const resolvedActivity = formData.activityLevel || ACTIVITY_OPTIONS[0];
+    const resolvedExperience = formData.experienceLevel || EXPERIENCE_OPTIONS[0];
+
+    const { data, error } = await supabase
+      .from('profiles')
+      .update({
+        full_name: formData.name,
+        age: formData.age !== '' && formData.age !== null ? Number(formData.age) : null,
+        height: formData.height !== '' && formData.height !== null ? Number(formData.height) : null,
+        weight: formData.weight !== '' && formData.weight !== null ? Number(formData.weight) : null,
+        activity_level: resolvedActivity,
+        experience_level: resolvedExperience
+      })
+      .eq('id', user.id)
+      .select()
+      .single();
+
+    if (error) {
+      setErrorMsg(error.message);
+      setIsSaving(false);
+      return;
+    }
+
     setUserData((prev) => ({
       ...prev,
-      ...formData,
-      metrics: {
-        ...prev.metrics,
-        currentWeight: Number(formData.weight) || prev.metrics.currentWeight
-      }
+      name: data.full_name || '',
+      age: data.age ?? '',
+      height: data.height ?? '',
+      weight: data.weight ?? '',
+      activityLevel: data.activity_level || resolvedActivity,
+      experienceLevel: data.experience_level || resolvedExperience
     }));
+
+    setIsSaving(false);
     setEditModalOpen(false);
   };
+
+  if (isLoading) {
+    return (
+      <div className="max-w-4xl mx-auto px-6 py-20 flex flex-col items-center justify-center gap-4 text-center">
+        <Loader2 size={36} className="text-[#CCFF00] animate-spin" />
+        <p className="text-sm text-gray-400 font-medium">Loading athlete profile...</p>
+      </div>
+    );
+  }
 
   return (
     <div className="max-w-4xl mx-auto px-6">
@@ -59,14 +222,16 @@ export default function Profile() {
         <Button
           variant="secondary"
           onClick={() => {
+            setErrorMsg('');
             setFormData({
-              name: userData.name,
-              age: userData.age,
-              height: userData.height,
-              weight: userData.weight,
-              activityLevel: userData.activityLevel,
-              experienceLevel: userData.experienceLevel
+              name: userData.name || '',
+              age: userData.age ?? '',
+              height: userData.height ?? '',
+              weight: userData.weight ?? '',
+              activityLevel: userData.activityLevel || ACTIVITY_OPTIONS[0],
+              experienceLevel: userData.experienceLevel || EXPERIENCE_OPTIONS[0]
             });
+
             setEditModalOpen(true);
           }}
           className="gap-2"
@@ -90,19 +255,21 @@ export default function Profile() {
           <div>
             <div className="flex items-center gap-3 mb-1.5 flex-wrap">
               <h2 className="text-2xl sm:text-3xl font-black text-white tracking-tight">
-                {userData.name}
+                {userData.name || 'Athlete'}
               </h2>
-              <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-semibold uppercase tracking-wider bg-[#CCFF00]/15 text-[#CCFF00] border border-[#CCFF00]/30">
-                {userData.experienceLevel}
-              </span>
+              {userData.experienceLevel && (
+                <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-semibold uppercase tracking-wider bg-[#CCFF00]/15 text-[#CCFF00] border border-[#CCFF00]/30">
+                  {userData.experienceLevel}
+                </span>
+              )}
             </div>
 
             <p className="text-sm text-gray-400 flex items-center gap-2 mb-1">
-              <Mail size={14} /> <span>{userData.email}</span>
+              <Mail size={14} /> <span>{userData.email || 'No email'}</span>
             </p>
 
             <p className="text-xs text-gray-500">
-              Member since {userData.joinedDate}
+              Member since {userData.joinedDate || 'Recently'}
             </p>
           </div>
         </div>
@@ -117,7 +284,7 @@ export default function Profile() {
             <div className="flex items-center gap-2">
               <Scale size={18} className="text-[#00E5FF] shrink-0" />
               <span className="font-bold text-white text-sm sm:text-base">
-                {userData.weight} kg
+                {userData.weight ? `${userData.weight} kg` : 'Not set'}
               </span>
             </div>
           </div>
@@ -129,7 +296,7 @@ export default function Profile() {
             <div className="flex items-center gap-2">
               <Ruler size={18} className="text-[#FF6B4A] shrink-0" />
               <span className="font-bold text-white text-sm sm:text-base">
-                {userData.height}
+                {userData.height ? `${userData.height} cm` : 'Not set'}
               </span>
             </div>
           </div>
@@ -141,7 +308,7 @@ export default function Profile() {
             <div className="flex items-center gap-2">
               <Calendar size={18} className="text-purple-400 shrink-0" />
               <span className="font-bold text-white text-sm sm:text-base">
-                {userData.age} years old
+                {userData.age ? `${userData.age} years old` : 'Not set'}
               </span>
             </div>
           </div>
@@ -153,7 +320,7 @@ export default function Profile() {
             <div className="flex items-center gap-2">
               <Flame size={18} className="text-[#CCFF00] shrink-0" />
               <span className="font-bold text-white text-sm sm:text-base">
-                {userData.activityLevel}
+                {userData.activityLevel || 'Not set'}
               </span>
             </div>
           </div>
@@ -165,7 +332,7 @@ export default function Profile() {
             <div className="flex items-center gap-2">
               <Dumbbell size={18} className="text-[#00E5FF] shrink-0" />
               <span className="font-bold text-white text-sm sm:text-base">
-                {userData.experienceLevel}
+                {userData.experienceLevel || 'Not set'}
               </span>
             </div>
           </div>
@@ -178,6 +345,13 @@ export default function Profile() {
         onClose={() => setEditModalOpen(false)}
         title="Edit Athlete Profile"
       >
+        {errorMsg && (
+          <div className="flex items-center gap-2 p-3 bg-red-500/10 border border-red-500/25 rounded-xl text-red-400 text-xs mb-3">
+            <AlertCircle size={16} className="shrink-0" />
+            <span>{errorMsg}</span>
+          </div>
+        )}
+
         <form onSubmit={handleSaveProfile} className="flex flex-col gap-4">
           <div className="flex items-center gap-3.5 p-3 rounded-2xl bg-white/[0.03] border border-white/10 mb-1">
             <Avatar name={formData.name} size="lg" />
@@ -199,8 +373,20 @@ export default function Profile() {
             <Input
               label="Age"
               type="number"
+              min="1"
+              max="130"
               value={formData.age}
-              onChange={(e) => setFormData({ ...formData, age: Number(e.target.value) })}
+              onKeyDown={(e) => {
+                if (['e', 'E', '+', '-', '.'].includes(e.key)) {
+                  e.preventDefault();
+                }
+              }}
+              onChange={(e) => {
+                const val = e.target.value;
+                if (val === '' || /^\d+$/.test(val)) {
+                  setFormData({ ...formData, age: val });
+                }
+              }}
               required
             />
 
@@ -208,20 +394,43 @@ export default function Profile() {
               label="Weight (kg)"
               type="number"
               step="0.1"
+              min="1"
+              max="500"
               value={formData.weight}
-              onChange={(e) => setFormData({ ...formData, weight: parseFloat(e.target.value) })}
+              onKeyDown={(e) => {
+                if (['e', 'E', '+', '-'].includes(e.key)) {
+                  e.preventDefault();
+                }
+              }}
+              onChange={(e) => setFormData({ ...formData, weight: e.target.value })}
               required
             />
           </div>
 
           <Input
-            label="Height"
-            type="text"
+            label="Height (cm)"
+            type="number"
+            min="1"
+            max="300"
+            step="1"
+            placeholder="e.g. 175"
             value={formData.height}
-            onChange={(e) => setFormData({ ...formData, height: e.target.value })}
+            onKeyDown={(e) => {
+              // Block scientific notation ('e', 'E'), signs ('+', '-'), and decimals ('.')
+              if (['e', 'E', '+', '-', '.'].includes(e.key)) {
+                e.preventDefault();
+              }
+            }}
+            onChange={(e) => {
+              const val = e.target.value;
+              // Allow empty or only positive whole numbers
+              if (val === '' || /^\d+$/.test(val)) {
+                setFormData({ ...formData, height: val });
+              }
+            }}
+            helperText="Enter height in centimeters (positive whole numbers only)"
             required
           />
-
 
           <div className="flex flex-col gap-1.5">
             <label className="text-xs font-semibold text-gray-300">Activity Level</label>
@@ -230,10 +439,11 @@ export default function Profile() {
               value={formData.activityLevel}
               onChange={(e) => setFormData({ ...formData, activityLevel: e.target.value })}
             >
-              <option value="Sedentary (Little/no exercise)">Sedentary (Little/no exercise)</option>
-              <option value="Moderate (2-3 days/week)">Moderate (2-3 days/week)</option>
-              <option value="Very Active (4-5 days/week)">Very Active (4-5 days/week)</option>
-              <option value="Elite (6+ days/week)">Elite (6+ days/week)</option>
+              {ACTIVITY_OPTIONS.map((option) => (
+                <option key={option} value={option}>
+                  {option}
+                </option>
+              ))}
             </select>
           </div>
 
@@ -244,9 +454,11 @@ export default function Profile() {
               value={formData.experienceLevel}
               onChange={(e) => setFormData({ ...formData, experienceLevel: e.target.value })}
             >
-              <option value="Beginner (< 1 year)">Beginner (&lt; 1 year)</option>
-              <option value="Intermediate (1-3 years)">Intermediate (1-3 years)</option>
-              <option value="Advanced (3+ years)">Advanced (3+ years)</option>
+              {EXPERIENCE_OPTIONS.map((option) => (
+                <option key={option} value={option}>
+                  {option}
+                </option>
+              ))}
             </select>
           </div>
 
@@ -258,7 +470,11 @@ export default function Profile() {
             >
               Cancel
             </Button>
-            <Button variant="primary" type="submit">
+            <Button
+              variant="primary"
+              type="submit"
+              loading={isSaving}
+            >
               Save Changes
             </Button>
           </div>
