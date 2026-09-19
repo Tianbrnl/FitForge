@@ -1,5 +1,6 @@
 // FitForge Workout Analytics Engine
 // Computes data-driven Personal Records, Active Streak, Workout Frequency, and Weekly Charts
+import { exercisesData } from '../data/exercises';
 
 export const toDateString = (dateInput) => {
   const d = dateInput ? new Date(dateInput) : new Date();
@@ -150,14 +151,35 @@ export function calculatePersonalRecords(workoutHistory = []) {
     if (!workout.exercises || !Array.isArray(workout.exercises)) return;
 
     workout.exercises.forEach((ex) => {
-      const name = ex.name?.trim();
+      let name = ex.name?.trim();
+      let muscle = ex.muscle;
+      let type = ex.type;
+
+      // If name is missing or is an ID like "ex-1", resolve it from the exercise library
+      const matchedExercise = exercisesData.find(
+        (e) => e.id === ex.exerciseId || e.id === name || e.name.toLowerCase() === name?.toLowerCase()
+      );
+
+      if (matchedExercise) {
+        // If name is missing or is an ID format (e.g., "ex-1"), use the official name
+        if (!name || name.match(/^ex-\d+$/i) || name.startsWith('ex-')) {
+          name = matchedExercise.name;
+        }
+        if (!muscle || muscle === 'Full Body') {
+          muscle = matchedExercise.muscle || matchedExercise.muscleGroup;
+        }
+        if (!type) {
+          type = matchedExercise.type;
+        }
+      }
+
       if (!name) return;
 
       if (!exerciseRecords[name]) {
         exerciseRecords[name] = {
           exerciseName: name,
-          muscle: ex.muscle || 'Full Body',
-          type: ex.type || 'weight',
+          muscle: muscle || 'Full Body',
+          type: type || 'weight',
           bestWeight: 0,
           bestWeightReps: 0,
           bestWeightDate: null,

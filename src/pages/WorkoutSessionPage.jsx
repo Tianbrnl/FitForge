@@ -1,19 +1,20 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
-import { 
-  CheckCircle2, 
-  Clock, 
-  Timer, 
-  ChevronLeft, 
-  ChevronRight, 
-  Plus, 
-  Trophy, 
-  Flame, 
+import {
+  CheckCircle2,
+  Clock,
+  Timer,
+  ChevronLeft,
+  ChevronRight,
+  Plus,
+  Trophy,
+  Flame,
   ArrowLeft
 } from 'lucide-react';
 import { useWorkouts } from '../hooks/useWorkouts';
 import { useWorkoutHistory } from '../hooks/useWorkoutHistory';
 import { calculatePersonalRecords } from '../utils/workoutAnalytics';
+import { exercisesData } from '../data/exercises';
 
 export default function WorkoutSessionPage() {
   const navigate = useNavigate();
@@ -106,8 +107,15 @@ export default function WorkoutSessionPage() {
 
   const exercises = workout.exercises || [];
   const currentExercise = exercises[currentExerciseIndex] || {};
+  const currentStatic = exercisesData.find(
+    (e) => e.id === currentExercise.exerciseId || e.id === currentExercise.name || e.id === currentExercise.id
+  );
+  const currentExerciseName = (currentExercise.name && !currentExercise.name.match(/^ex-\d+$/i) && !currentExercise.name.startsWith('ex-'))
+    ? currentExercise.name
+    : (currentStatic?.name || currentExercise.name || currentExercise.exerciseId);
+  const currentExerciseMuscle = currentStatic?.muscle || currentStatic?.muscleGroup || currentExercise.muscle || 'Full Body';
   const currentPerf = performanceState[currentExerciseIndex] || {};
-  const isCardio = currentExercise.type === 'cardio' || currentExercise.muscle === 'Cardio';
+  const isCardio = currentExercise.type === 'cardio' || currentExerciseMuscle === 'Cardio';
   const isBodyweight = currentExercise.type === 'bodyweight';
 
   // Format MM:SS
@@ -197,15 +205,24 @@ export default function WorkoutSessionPage() {
 
   const handleFinishWorkout = () => {
     const durationMinutes = Math.max(1, Math.round(elapsedSeconds / 60));
-    
+
     // Construct session exercises payload
     const sessionExercises = exercises.map((ex, idx) => {
       const p = performanceState[idx] || {};
-      if (ex.type === 'cardio') {
+      const staticMatch = exercisesData.find(
+        (e) => e.id === ex.exerciseId || e.id === ex.name || e.id === ex.id
+      );
+      const resolvedName = (ex.name && !ex.name.match(/^ex-\d+$/i) && !ex.name.startsWith('ex-'))
+        ? ex.name
+        : (staticMatch?.name || ex.name || ex.exerciseId);
+      const resolvedMuscle = staticMatch?.muscle || staticMatch?.muscleGroup || ex.muscle || 'Full Body';
+      const resolvedType = ex.type || staticMatch?.type || 'strength';
+
+      if (resolvedType === 'cardio' || resolvedMuscle === 'Cardio') {
         return {
           exerciseId: ex.exerciseId,
-          name: ex.name,
-          muscle: ex.muscle || 'Cardio',
+          name: resolvedName,
+          muscle: resolvedMuscle,
           type: 'cardio',
           duration: p.duration || ex.duration || 20,
           distance: p.distance || ex.distance || 3.0,
@@ -214,9 +231,9 @@ export default function WorkoutSessionPage() {
       }
       return {
         exerciseId: ex.exerciseId,
-        name: ex.name,
-        muscle: ex.muscle || 'Full Body',
-        type: ex.type || 'strength',
+        name: resolvedName,
+        muscle: resolvedMuscle,
+        type: resolvedType,
         sets: (p.sets || []).map((s) => ({
           setNumber: s.setNumber,
           targetReps: s.targetReps,
@@ -244,11 +261,21 @@ export default function WorkoutSessionPage() {
     const updatedPRs = calculatePersonalRecords([newSession, ...history]);
 
     const achieved = [];
+
     updatedPRs.forEach((uPr) => {
-      const old = oldPRs.find((o) => o.exerciseName === uPr.exerciseName);
+      const old = oldPRs.find(
+        (o) => o.exercise === uPr.exercise
+      );
+
       if (!old) {
         achieved.push(uPr);
-      } else if (uPr.bestWeight > old.bestWeight || uPr.bestReps > old.bestReps) {
+        return;
+      }
+
+      if (
+        uPr.value !== old.value ||
+        uPr.detail !== old.detail
+      ) {
         achieved.push(uPr);
       }
     });
@@ -320,8 +347,8 @@ export default function WorkoutSessionPage() {
                 ${i === currentExerciseIndex
                   ? 'bg-emerald-500 ring-2 ring-emerald-500/40'
                   : i < currentExerciseIndex
-                  ? 'bg-emerald-500/40'
-                  : 'bg-slate-800'
+                    ? 'bg-emerald-500/40'
+                    : 'bg-slate-800'
                 }
               `}
               title={`Jump to exercise ${i + 1}`}
@@ -370,12 +397,12 @@ export default function WorkoutSessionPage() {
                 #{String(currentExerciseIndex + 1).padStart(2, '0')}
               </span>
               <h2 className="text-lg sm:text-xl font-bold text-white tracking-tight truncate">
-                {currentExercise.name}
+                {currentExerciseName}
               </h2>
             </div>
 
             <span className="text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded bg-slate-800 text-emerald-400 border border-slate-700/60 shrink-0">
-              {currentExercise.muscle}
+              {currentExerciseMuscle}
             </span>
           </div>
 
@@ -458,9 +485,8 @@ export default function WorkoutSessionPage() {
                 {(currentPerf.sets || []).map((set, sIdx) => (
                   <div
                     key={sIdx}
-                    className={`grid grid-cols-12 items-center py-2.5 px-2 transition ${
-                      set.completed ? 'bg-emerald-500/[0.04]' : ''
-                    }`}
+                    className={`grid grid-cols-12 items-center py-2.5 px-2 transition ${set.completed ? 'bg-emerald-500/[0.04]' : ''
+                      }`}
                   >
                     <span className="col-span-2 text-center font-mono text-xs font-semibold text-slate-400">
                       #{set.setNumber}
@@ -617,9 +643,9 @@ export default function WorkoutSessionPage() {
                 <div className="space-y-1.5">
                   {newPRs.map((pr, i) => (
                     <div key={i} className="text-xs text-slate-300 flex justify-between">
-                      <span className="font-semibold">{pr.exerciseName}:</span>
+                      <span className="font-semibold">{pr.exercise}:</span>
                       <span className="text-emerald-400 font-mono font-bold">
-                        {pr.bestWeight > 0 ? `${pr.bestWeight} kg` : `${pr.bestReps} reps`}
+                        {pr.value}
                       </span>
                     </div>
                   ))}
