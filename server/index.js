@@ -64,7 +64,7 @@ app.post('/api/chat', async (req, res) => {
         });
     }
     try {
-        const { message } = req.body;
+        const { message, userName } = req.body;
 
         if (!message?.trim()) {
             return res.status(400).json({
@@ -72,7 +72,18 @@ app.post('/api/chat', async (req, res) => {
             });
         }
 
-        const reply = await generateGeminiResponse(message);
+        let athleteName = userName;
+        if (!athleteName || athleteName === 'Athlete') {
+            const { data: userProfile } = await supabase
+                .from('profiles')
+                .select('full_name')
+                .eq('id', user.id)
+                .maybeSingle();
+
+            athleteName = userProfile?.full_name || user?.user_metadata?.full_name || (user.email ? user.email.split('@')[0] : 'Athlete');
+        }
+
+        const reply = await generateGeminiResponse(message, athleteName);
 
         const { error: usageInsertError } = await supabase
             .from('ai_usage')
