@@ -3,7 +3,7 @@ import { Bot, X, Sparkles, Maximize2 } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import ChatMessage from './ChatMessage';
 import ChatInput from './ChatInput';
-
+import { supabase } from '../../services/supabase';
 const SUGGESTED_QUESTIONS = [
   "What workout should I do today?",
   "What should I eat after my workout?",
@@ -21,11 +21,20 @@ const INITIAL_MESSAGES = [
 ];
 
 export default function ChatBox({ onClose, isFullPage = false }) {
+  const [session, setSession] = useState(null);
   const [messages, setMessages] = useState(INITIAL_MESSAGES);
   const [isTyping, setIsTyping] = useState(false);
   const messagesEndRef = useRef(null);
   const navigate = useNavigate();
 
+  useEffect(() => {
+    const getSession = async () => {
+      const { data } = await supabase.auth.getSession();
+      setSession(data.session);
+    };
+
+    getSession();
+  }, []);
   const scrollToBottom = () => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   };
@@ -34,30 +43,14 @@ export default function ChatBox({ onClose, isFullPage = false }) {
     scrollToBottom();
   }, [messages, isTyping]);
 
-  const generateMockReply = (query) => {
-    const q = query.toLowerCase();
 
-    if (q.includes("what workout should i do today") || (q.includes("workout") && q.includes("today"))) {
-      return "Based on your rest day yesterday, our Chest Hypertrophy Blast or Upper Body Power Matrix would be ideal today! Focus on controlled eccentrics and an 8-10 rep range.";
-    }
-    if (q.includes("what should i eat after my workout") || (q.includes("eat") && q.includes("after"))) {
-      return "Post-workout, aim for 25-35g of rapid-digesting protein and 40-60g of complex carbs within 45-60 minutes. A whey protein isolate shake with a medium banana or grilled chicken with quinoa is optimal for muscle protein synthesis.";
-    }
-    if (q.includes("create a beginner workout") || (q.includes("beginner"))) {
-      return "Here is a rock-solid 3-day Full Body Beginner Split:\n1. Goblet Squats: 3 sets × 10 reps\n2. Dumbbell Flat Bench: 3 sets × 10 reps\n3. Lat Pulldown: 3 sets × 12 reps\n4. Dumbbell Shoulder Press: 3 sets × 10 reps\n5. Plank Hold: 3 sets × 30-45 sec\nRest 60-90s between sets. Focus on perfect technique!";
-    }
-    if (q.includes("how can i improve my stamina") || q.includes("stamina")) {
-      return "To elevate cardiovascular endurance without sacrificing lean muscle:\n• Incorporate 2 sessions of Zone 2 aerobic base cardio (40 mins at 65-70% max heart rate).\n• Add 1 weekly HIIT sprint interval session (e.g., 30s on / 30s off for 8 rounds).\n• Prioritize hydration with electrolytes and maintain progressive overload in interval duration.";
-    }
-    if (q.includes("protein") || q.includes("calories")) {
-      return "For lean muscle gain, aim for 1.8 to 2.2 grams of protein per kilogram of body weight. At your current weight of 78.5 kg, targeting ~160-175g protein daily divided across 3-4 meals will keep you in an anabolic state.";
-    }
-    return `Great question! As your fitness assistant, I suggest pairing balanced progressive resistance training with calculated caloric intake. Keep logging your sets and meals, and feel free to ask for specific exercise form tips or meal adjustments!`;
-  };
 
-  const handleSendMessage = (text) => {
+  const handleSendMessage = async (text) => {
     const now = new Date();
-    const timeStr = now.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+    const timeStr = now.toLocaleTimeString([], {
+      hour: '2-digit',
+      minute: '2-digit'
+    });
 
     const userMsg = {
       id: Date.now(),
@@ -69,17 +62,52 @@ export default function ChatBox({ onClose, isFullPage = false }) {
     setMessages((prev) => [...prev, userMsg]);
     setIsTyping(true);
 
-    setTimeout(() => {
-      const reply = generateMockReply(text);
+    try {
+      const response = await fetch('http://localhost:3001/api/chat', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${session?.access_token}`
+        },
+        body: JSON.stringify({
+          message: text
+        })
+      });
+
+      const data = await response.json();
+
+      if (!response.ok) {
+        throw new Error(data.error || 'Failed to get AI response.');
+      }
+
       const aiMsg = {
         id: Date.now() + 1,
         sender: 'ai',
-        text: reply,
-        time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+        text: data.reply,
+        time: new Date().toLocaleTimeString([], {
+          hour: '2-digit',
+          minute: '2-digit'
+        })
       };
+
       setMessages((prev) => [...prev, aiMsg]);
+    } catch (error) {
+      console.error('AI chat error:', error);
+
+      const errorMsg = {
+        id: Date.now() + 1,
+        sender: 'ai',
+        text: 'Sorry, I could not connect to FitForge AI right now. Please try again in a moment.',
+        time: new Date().toLocaleTimeString([], {
+          hour: '2-digit',
+          minute: '2-digit'
+        })
+      };
+
+      setMessages((prev) => [...prev, errorMsg]);
+    } finally {
       setIsTyping(false);
-    }, 700);
+    }
   };
 
   return (
