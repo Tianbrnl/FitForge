@@ -1,9 +1,9 @@
 import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { 
-  Flame, 
-  Calendar, 
-  Zap, 
+import {
+  Flame,
+  Calendar,
+  Zap,
   Trophy,
   Dumbbell,
   RotateCcw,
@@ -17,11 +17,11 @@ import ProgressChart from '../components/progress/ProgressChart';
 import { initialUserData } from '../data/user';
 import { defaultWorkoutHistory } from '../data/defaultHistory';
 import { useLocalStorage } from '../hooks/useLocalStorage';
-import { 
-  calculateActiveStreak, 
-  calculateWorkoutFrequency, 
-  calculatePersonalRecords, 
-  generateWeeklyActivity 
+import {
+  calculateActiveStreak,
+  calculateWorkoutFrequency,
+  calculatePersonalRecords,
+  generateWeeklyActivity
 } from '../utils/workoutAnalytics';
 
 export default function Progress() {
@@ -71,31 +71,28 @@ export default function Progress() {
           <div className="bg-[#0E131E] border border-white/10 rounded-full p-1 flex items-center shadow-lg">
             <button
               onClick={() => setPeriod('week')}
-              className={`px-3.5 py-1.5 rounded-full text-xs font-semibold transition duration-150 cursor-pointer ${
-                period === 'week'
+              className={`px-3.5 py-1.5 rounded-full text-xs font-semibold transition duration-150 cursor-pointer ${period === 'week'
                   ? 'bg-[#CCFF00] text-gray-950 font-bold shadow-md'
                   : 'text-gray-400 hover:text-white'
-              }`}
+                }`}
             >
               This Week
             </button>
             <button
               onClick={() => setPeriod('month')}
-              className={`px-3.5 py-1.5 rounded-full text-xs font-semibold transition duration-150 cursor-pointer ${
-                period === 'month'
+              className={`px-3.5 py-1.5 rounded-full text-xs font-semibold transition duration-150 cursor-pointer ${period === 'month'
                   ? 'bg-[#CCFF00] text-gray-950 font-bold shadow-md'
                   : 'text-gray-400 hover:text-white'
-              }`}
+                }`}
             >
               This Month
             </button>
             <button
               onClick={() => setPeriod('30days')}
-              className={`px-3.5 py-1.5 rounded-full text-xs font-semibold transition duration-150 cursor-pointer ${
-                period === '30days'
+              className={`px-3.5 py-1.5 rounded-full text-xs font-semibold transition duration-150 cursor-pointer ${period === '30days'
                   ? 'bg-[#CCFF00] text-gray-950 font-bold shadow-md'
                   : 'text-gray-400 hover:text-white'
-              }`}
+                }`}
             >
               Last 30 Days
             </button>
@@ -255,14 +252,14 @@ export default function Progress() {
               const badgeClass = pr.category === 'weight'
                 ? 'bg-[#CCFF00]/15 text-[#CCFF00] border-[#CCFF00]/30'
                 : pr.category === 'cardio'
-                ? 'bg-[#00E5FF]/15 text-[#00E5FF] border-[#00E5FF]/30'
-                : 'bg-purple-500/15 text-purple-400 border-purple-500/30';
+                  ? 'bg-[#00E5FF]/15 text-[#00E5FF] border-[#00E5FF]/30'
+                  : 'bg-purple-500/15 text-purple-400 border-purple-500/30';
 
               const badgeLabel = pr.category === 'weight'
                 ? 'Weight PR'
                 : pr.category === 'cardio'
-                ? 'Cardio PR'
-                : 'Rep PR';
+                  ? 'Cardio PR'
+                  : 'Rep PR';
 
               return (
                 <Card key={pr.id} glow="lime" className="p-6">

@@ -1,4 +1,6 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
+import { supabase } from '../services/supabase';
+import { useAuth } from '../context/AuthContext';
 import {
   Plus,
   Coffee,
@@ -30,11 +32,124 @@ const QUICK_PRESETS = [
 ];
 
 export default function Nutrition() {
+  const { user } = useAuth();
   const [nutritionData, setNutritionData] = useLocalStorage(
     'fitforge_nutrition',
     initialNutritionData
   );
+  const [targetsLoading, setTargetsLoading] = useState(true);
+  const [targetsSaving, setTargetsSaving] = useState(false);
+  const [mealsLoading, setMealsLoading] = useState(true);
+  const [mealSaving, setMealSaving] = useState(false);
+  useEffect(() => {
+    async function loadNutritionTargets() {
+      if (!user?.id) {
+        setTargetsLoading(false);
+        return;
+      }
 
+      try {
+        const { data, error } = await supabase
+          .from('nutrition_targets')
+          .select('calories, protein, carbohydrates, fats')
+          .eq('user_id', user.id)
+          .maybeSingle();
+
+        if (error) {
+          console.error('Failed to load nutrition targets:', error);
+          return;
+        }
+
+        if (data) {
+          setNutritionData((prev) => ({
+            ...prev,
+            dailyGoals: {
+              calories: data.calories,
+              protein: data.protein,
+              carbs: data.carbohydrates,
+              fat: data.fats
+            }
+          }));
+        }
+      } catch (error) {
+        console.error('Error loading nutrition targets:', error);
+      } finally {
+        setTargetsLoading(false);
+      }
+    }
+
+    loadNutritionTargets();
+  }, [user?.id, setNutritionData]);
+  useEffect(() => {
+    async function loadTodayMeals() {
+      if (!user?.id) {
+        setMealsLoading(false);
+        return;
+      }
+
+      try {
+        const today = new Date().toISOString().split('T')[0];
+
+        const { data, error } = await supabase
+          .from('meal_logs')
+          .select(`
+          id,
+          food_id,
+          meal_type,
+          food_name,
+          serving,
+          protein,
+          calories,
+          carbs,
+          fats,
+          consumed_at
+        `)
+          .eq('user_id', user.id)
+          .eq('consumed_at', today)
+          .order('created_at', { ascending: true });
+
+        if (error) {
+          console.error('Failed to load meal logs:', error);
+          return;
+        }
+
+        const meals = {
+          breakfast: [],
+          lunch: [],
+          dinner: [],
+          snacks: []
+        };
+
+        data.forEach((item) => {
+          const mealKey = item.meal_type;
+
+          if (!meals[mealKey]) return;
+
+          meals[mealKey].push({
+            id: item.id,
+            foodId: item.food_id,
+            name: item.food_name,
+            portion: item.serving,
+            calories: Number(item.calories) || 0,
+            protein: Number(item.protein) || 0,
+            carbs: Number(item.carbs) || 0,
+            fat: Number(item.fats) || 0
+          });
+        });
+
+        setNutritionData((prev) => ({
+          ...prev,
+          meals
+        }));
+      } catch (error) {
+        console.error('Error loading meal logs:', error);
+      } finally {
+        setMealsLoading(false);
+      }
+    }
+
+    loadTodayMeals();
+  }, [user?.id, setNutritionData]);
   const [addModalOpen, setAddModalOpen] = useState(false);
   const [activeMealKey, setActiveMealKey] = useState('breakfast');
 
@@ -47,6 +162,22 @@ export default function Nutrition() {
     carbs: '',
     fat: ''
   });
+
+  // Edit Food Form state
+  const [editModalOpen, setEditModalOpen] = useState(false);
+  const [editingItem, setEditingItem] = useState(null);
+  const [editingSourceMealKey, setEditingSourceMealKey] = useState('breakfast');
+  const [editMealKey, setEditMealKey] = useState('breakfast');
+  const [editFoodForm, setEditFoodForm] = useState({
+    name: '',
+    portion: '',
+    calories: '',
+    protein: '',
+    carbs: '',
+    fat: ''
+  });
+  const [editSaving, setEditSaving] = useState(false);
+  const [editError, setEditError] = useState('');
 
   // Target Editing state
   const [targetModalMode, setTargetModalMode] = useState(null); // null | 'all' | 'calories' | 'protein' | 'carbs' | 'fat'
@@ -108,39 +239,262 @@ export default function Nutrition() {
     });
   };
 
-  const handleAddCustomFood = (e) => {
+  const handleAddCustomFood = async (e) => {
     if (e) e.preventDefault();
+
+    if (!user?.id) {
+      console.error('User is not logged in.');
+      return;
+    }
+
     if (!foodForm.name.trim()) return;
 
-    const newItem = {
-      id: `logged-${Date.now()}-${Math.random().toString(36).substr(2, 4)}`,
-      name: foodForm.name.trim(),
-      portion: foodForm.portion.trim() || '1 serving',
-      calories: parseFloat(foodForm.calories) || 0,
-      protein: parseFloat(foodForm.protein) || 0,
-      carbs: parseFloat(foodForm.carbs) || 0,
-      fat: parseFloat(foodForm.fat) || 0
-    };
+    setMealSaving(true);
 
-    setNutritionData((prev) => ({
-      ...prev,
-      meals: {
-        ...prev.meals,
-        [activeMealKey]: [...(prev.meals[activeMealKey] || []), newItem]
+    try {
+      // 1. Save the food as a reusable custom food
+      const { data: foodItem, error: foodError } = await supabase
+        .from('food_items')
+        .insert({
+          user_id: user.id,
+          food_name: foodForm.name.trim(),
+          serving: foodForm.portion.trim() || '1 serving',
+          calories: parseFloat(foodForm.calories) || 0,
+          protein: parseFloat(foodForm.protein) || 0,
+          carbs: parseFloat(foodForm.carbs) || 0,
+          fats: parseFloat(foodForm.fat) || 0,
+          is_preset: false
+        })
+        .select()
+        .single();
+
+      if (foodError) {
+        console.error('Failed to save food item:', foodError);
+        return;
       }
-    }));
 
-    setAddModalOpen(false);
+      // 2. Log the food into the selected meal
+      const today = new Date().toISOString().split('T')[0];
+
+      const { data: mealLog, error: mealError } = await supabase
+        .from('meal_logs')
+        .insert({
+          user_id: user.id,
+          food_id: foodItem.id,
+          meal_type: activeMealKey,
+          food_name: foodItem.food_name,
+          serving: foodItem.serving,
+          protein: foodItem.protein,
+          calories: foodItem.calories,
+          carbs: foodItem.carbs,
+          fats: foodItem.fats,
+          consumed_at: today
+        })
+        .select()
+        .single();
+
+      if (mealError) {
+        console.error('Failed to save meal log:', mealError);
+        return;
+      }
+
+      // 3. Update the UI immediately
+      const newItem = {
+        id: mealLog.id,
+        foodId: mealLog.food_id,
+        name: mealLog.food_name,
+        portion: mealLog.serving,
+        calories: Number(mealLog.calories) || 0,
+        protein: Number(mealLog.protein) || 0,
+        carbs: Number(mealLog.carbs) || 0,
+        fat: Number(mealLog.fats) || 0
+      };
+
+      setNutritionData((prev) => ({
+        ...prev,
+        meals: {
+          ...prev.meals,
+          [activeMealKey]: [
+            ...(prev.meals[activeMealKey] || []),
+            newItem
+          ]
+        }
+      }));
+
+      // 4. Reset form and close modal
+      setFoodForm({
+        name: '',
+        portion: '',
+        calories: '',
+        protein: '',
+        carbs: '',
+        fat: ''
+      });
+
+      setAddModalOpen(false);
+    } catch (error) {
+      console.error('Error adding food:', error);
+    } finally {
+      setMealSaving(false);
+    }
   };
 
-  const handleRemoveFoodFromMeal = (mealKey, itemId) => {
+  const handleRemoveFoodFromMeal = async (mealKey, itemId) => {
+    if (user?.id) {
+      try {
+        const { error } = await supabase
+          .from('meal_logs')
+          .delete()
+          .eq('id', itemId)
+          .eq('user_id', user.id);
+
+        if (error) {
+          console.error('Failed to remove meal log:', error);
+          return;
+        }
+      } catch (error) {
+        console.error('Error removing meal:', error);
+      }
+    }
+
     setNutritionData((prev) => ({
       ...prev,
       meals: {
         ...prev.meals,
-        [mealKey]: prev.meals[mealKey].filter((i) => i.id !== itemId)
+        [mealKey]: prev.meals[mealKey].filter(
+          (item) => item.id !== itemId
+        )
       }
     }));
+  };
+
+  const handleOpenEditModal = (mealKey, item) => {
+    setEditingSourceMealKey(mealKey);
+    setEditMealKey(mealKey);
+    setEditingItem(item);
+    setEditFoodForm({
+      name: item.name || '',
+      portion: item.portion || '',
+      calories: item.calories !== undefined ? item.calories.toString() : '',
+      protein: item.protein !== undefined ? item.protein.toString() : '',
+      carbs: item.carbs !== undefined ? item.carbs.toString() : '',
+      fat: item.fat !== undefined ? item.fat.toString() : ''
+    });
+    setEditError('');
+    setEditModalOpen(true);
+  };
+
+  const handleSaveEditFood = async (e) => {
+    if (e) e.preventDefault();
+    if (!editingItem) return;
+
+    if (!editFoodForm.name.trim()) {
+      setEditError('Food name is required.');
+      return;
+    }
+
+    const cal = parseFloat(editFoodForm.calories);
+    if (isNaN(cal) || cal < 0) {
+      setEditError('Please enter a valid calorie amount.');
+      return;
+    }
+
+    setEditSaving(true);
+    setEditError('');
+
+    try {
+      const parsedProtein = parseFloat(editFoodForm.protein) || 0;
+      const parsedCarbs = parseFloat(editFoodForm.carbs) || 0;
+      const parsedFat = parseFloat(editFoodForm.fat) || 0;
+
+      if (user?.id) {
+        // 1. Update meal log in Supabase
+        const { error: updateError } = await supabase
+          .from('meal_logs')
+          .update({
+            food_name: editFoodForm.name.trim(),
+            serving: editFoodForm.portion.trim() || '1 serving',
+            calories: Math.round(cal),
+            protein: parsedProtein,
+            carbs: parsedCarbs,
+            fats: parsedFat,
+            meal_type: editMealKey
+          })
+          .eq('id', editingItem.id)
+          .eq('user_id', user.id);
+
+        if (updateError) {
+          console.error('Failed to update meal log:', updateError);
+          setEditError(updateError.message || 'Failed to update food log.');
+          setEditSaving(false);
+          return;
+        }
+
+        // 2. If item has linked foodId, update the food_items entry
+        if (editingItem.foodId) {
+          await supabase
+            .from('food_items')
+            .update({
+              food_name: editFoodForm.name.trim(),
+              serving: editFoodForm.portion.trim() || '1 serving',
+              calories: Math.round(cal),
+              protein: parsedProtein,
+              carbs: parsedCarbs,
+              fats: parsedFat
+            })
+            .eq('id', editingItem.foodId)
+            .eq('user_id', user.id);
+        }
+      }
+
+      // 3. Update local state
+      const updatedItem = {
+        ...editingItem,
+        name: editFoodForm.name.trim(),
+        portion: editFoodForm.portion.trim() || '1 serving',
+        calories: Math.round(cal),
+        protein: parsedProtein,
+        carbs: parsedCarbs,
+        fat: parsedFat
+      };
+
+      setNutritionData((prev) => {
+        if (editingSourceMealKey === editMealKey) {
+          // Same meal: replace item in place
+          return {
+            ...prev,
+            meals: {
+              ...prev.meals,
+              [editingSourceMealKey]: (prev.meals[editingSourceMealKey] || []).map((item) =>
+                item.id === editingItem.id ? updatedItem : item
+              )
+            }
+          };
+        } else {
+          // Changed meal category: move item
+          const filteredSource = (prev.meals[editingSourceMealKey] || []).filter(
+            (item) => item.id !== editingItem.id
+          );
+          const targetList = [...(prev.meals[editMealKey] || []), updatedItem];
+          return {
+            ...prev,
+            meals: {
+              ...prev.meals,
+              [editingSourceMealKey]: filteredSource,
+              [editMealKey]: targetList
+            }
+          };
+        }
+      });
+
+      setEditModalOpen(false);
+      setEditingItem(null);
+    } catch (err) {
+      console.error('Error saving edited food:', err);
+      setEditError('An unexpected error occurred while saving.');
+    } finally {
+      setEditSaving(false);
+    }
   };
 
   // Open Target Editing modal
@@ -156,7 +510,7 @@ export default function Nutrition() {
   };
 
   // Save Target Edits with validation
-  const handleSaveTargets = (e) => {
+  const handleSaveTargets = async (e) => {
     if (e) e.preventDefault();
     setTargetError('');
 
@@ -205,18 +559,50 @@ export default function Nutrition() {
       fat: targetModalMode === 'fat' || targetModalMode === 'all' ? Math.round(ft) : dailyGoals.fat
     };
 
-    setNutritionData((prev) => ({
-      ...prev,
-      dailyGoals: updatedGoals
-    }));
-
-    try {
-      localStorage.setItem('fitforge_nutrition_targets', JSON.stringify(updatedGoals));
-    } catch {
-      // ignore
+    if (!user?.id) {
+      setTargetError('You must be logged in to save nutrition targets.');
+      return;
     }
 
-    setTargetModalMode(null);
+    setTargetsSaving(true);
+
+    try {
+      const { error } = await supabase
+        .from('nutrition_targets')
+        .upsert(
+          {
+            user_id: user.id,
+            calories: updatedGoals.calories,
+            protein: updatedGoals.protein,
+            carbohydrates: updatedGoals.carbs,
+            fats: updatedGoals.fat,
+            updated_at: new Date().toISOString()
+          },
+          {
+            onConflict: 'user_id'
+          }
+        );
+
+      if (error) {
+        console.error('Failed to save nutrition targets:', error);
+        setTargetError(error.message);
+        return;
+      }
+
+      setNutritionData((prev) => ({
+        ...prev,
+        dailyGoals: updatedGoals
+      }));
+
+      setTargetModalMode(null);
+    } catch (error) {
+      console.error('Error saving nutrition targets:', error);
+      setTargetError('Failed to save nutrition targets.');
+    } finally {
+      setTargetsSaving(false);
+    }
+
+    // setTargetModalMode(null);
   };
 
   const getTargetModalTitle = () => {
@@ -480,6 +866,7 @@ export default function Nutrition() {
             items={nutritionData.meals.breakfast}
             onOpenAddModal={handleOpenAddModal}
             onRemoveItem={handleRemoveFoodFromMeal}
+            onEditItem={handleOpenEditModal}
           />
 
           <MealCard
@@ -489,6 +876,7 @@ export default function Nutrition() {
             items={nutritionData.meals.lunch}
             onOpenAddModal={handleOpenAddModal}
             onRemoveItem={handleRemoveFoodFromMeal}
+            onEditItem={handleOpenEditModal}
           />
 
           <MealCard
@@ -498,6 +886,7 @@ export default function Nutrition() {
             items={nutritionData.meals.dinner}
             onOpenAddModal={handleOpenAddModal}
             onRemoveItem={handleRemoveFoodFromMeal}
+            onEditItem={handleOpenEditModal}
           />
 
           <MealCard
@@ -507,6 +896,7 @@ export default function Nutrition() {
             items={nutritionData.meals.snacks}
             onOpenAddModal={handleOpenAddModal}
             onRemoveItem={handleRemoveFoodFromMeal}
+            onEditItem={handleOpenEditModal}
           />
         </div>
       </div>
@@ -821,8 +1211,177 @@ export default function Nutrition() {
             >
               Cancel
             </Button>
-            <Button variant="primary" type="submit">
-              Save {targetModalMode === 'all' ? 'Changes' : 'Target'}
+            <Button
+              variant="primary"
+              type="submit"
+              disabled={targetsSaving}
+            >
+              {targetsSaving
+                ? 'Saving...'
+                : `Save ${targetModalMode === 'all' ? 'Changes' : 'Target'}`}
+            </Button>
+          </div>
+        </form>
+      </Modal>
+
+      {/* Edit Food in Meal Modal */}
+      <Modal
+        isOpen={editModalOpen}
+        onClose={() => {
+          setEditModalOpen(false);
+          setEditingItem(null);
+        }}
+        title="Edit Food Entry"
+      >
+        <form onSubmit={handleSaveEditFood} className="flex flex-col gap-4">
+          {editError && (
+            <div className="p-3 rounded-xl bg-rose-500/10 border border-rose-500/25 flex items-center gap-2 text-rose-400 text-xs">
+              <AlertCircle size={15} className="shrink-0" />
+              <span>{editError}</span>
+            </div>
+          )}
+
+          {/* Meal Window Category Selector */}
+          <div>
+            <label className="block text-xs font-semibold uppercase tracking-wider text-gray-400 mb-1.5">
+              Meal Window
+            </label>
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+              {[
+                { key: 'breakfast', label: 'Breakfast', icon: Coffee },
+                { key: 'lunch', label: 'Lunch', icon: Utensils },
+                { key: 'dinner', label: 'Dinner', icon: Moon },
+                { key: 'snacks', label: 'Snacks', icon: Cookie }
+              ].map(({ key, label, icon: MealIcon }) => {
+                const isActive = editMealKey === key;
+                return (
+                  <button
+                    key={key}
+                    type="button"
+                    onClick={() => setEditMealKey(key)}
+                    className={`flex items-center justify-center gap-1.5 py-2 px-3 rounded-xl text-xs font-semibold border transition cursor-pointer ${
+                      isActive
+                        ? 'bg-[#CCFF00]/15 text-[#CCFF00] border-[#CCFF00]/40 shadow-sm'
+                        : 'bg-white/[0.03] text-gray-400 border-white/10 hover:border-white/20 hover:text-white'
+                    }`}
+                  >
+                    <MealIcon size={13} />
+                    <span>{label}</span>
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+
+          {/* Food Form Fields */}
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            <div className="sm:col-span-2">
+              <label className="block text-xs font-semibold uppercase tracking-wider text-gray-400 mb-1">
+                Food Name *
+              </label>
+              <input
+                type="text"
+                required
+                placeholder="e.g. Grilled Chicken, Oats, Salmon"
+                value={editFoodForm.name}
+                onChange={(e) => setEditFoodForm((prev) => ({ ...prev, name: e.target.value }))}
+                className="w-full bg-[#0E131E] border border-white/15 focus:border-[#CCFF00] text-white px-3.5 py-2.5 rounded-xl text-sm outline-none transition"
+              />
+            </div>
+
+            <div>
+              <label className="block text-xs font-semibold uppercase tracking-wider text-gray-400 mb-1">
+                Portion / Serving
+              </label>
+              <input
+                type="text"
+                placeholder="e.g. 150g, 1 cup"
+                value={editFoodForm.portion}
+                onChange={(e) => setEditFoodForm((prev) => ({ ...prev, portion: e.target.value }))}
+                className="w-full bg-[#0E131E] border border-white/15 focus:border-[#CCFF00] text-white px-3.5 py-2.5 rounded-xl text-sm outline-none transition"
+              />
+            </div>
+
+            <div>
+              <label className="block text-xs font-semibold uppercase tracking-wider text-gray-400 mb-1">
+                Calories (kcal) *
+              </label>
+              <input
+                type="number"
+                required
+                min="0"
+                step="1"
+                placeholder="e.g. 250"
+                value={editFoodForm.calories}
+                onChange={(e) => setEditFoodForm((prev) => ({ ...prev, calories: e.target.value }))}
+                className="w-full bg-[#0E131E] border border-white/15 focus:border-[#CCFF00] text-white px-3.5 py-2.5 rounded-xl text-sm outline-none transition"
+              />
+            </div>
+
+            <div>
+              <label className="block text-xs font-semibold uppercase tracking-wider text-gray-400 mb-1">
+                Protein (g)
+              </label>
+              <input
+                type="number"
+                min="0"
+                step="0.1"
+                placeholder="e.g. 30"
+                value={editFoodForm.protein}
+                onChange={(e) => setEditFoodForm((prev) => ({ ...prev, protein: e.target.value }))}
+                className="w-full bg-[#0E131E] border border-white/15 focus:border-[#CCFF00] text-white px-3.5 py-2.5 rounded-xl text-sm outline-none transition"
+              />
+            </div>
+
+            <div>
+              <label className="block text-xs font-semibold uppercase tracking-wider text-gray-400 mb-1">
+                Carbs (g)
+              </label>
+              <input
+                type="number"
+                min="0"
+                step="0.1"
+                placeholder="e.g. 25"
+                value={editFoodForm.carbs}
+                onChange={(e) => setEditFoodForm((prev) => ({ ...prev, carbs: e.target.value }))}
+                className="w-full bg-[#0E131E] border border-white/15 focus:border-[#CCFF00] text-white px-3.5 py-2.5 rounded-xl text-sm outline-none transition"
+              />
+            </div>
+
+            <div>
+              <label className="block text-xs font-semibold uppercase tracking-wider text-gray-400 mb-1">
+                Fats (g)
+              </label>
+              <input
+                type="number"
+                min="0"
+                step="0.1"
+                placeholder="e.g. 8"
+                value={editFoodForm.fat}
+                onChange={(e) => setEditFoodForm((prev) => ({ ...prev, fat: e.target.value }))}
+                className="w-full bg-[#0E131E] border border-white/15 focus:border-[#CCFF00] text-white px-3.5 py-2.5 rounded-xl text-sm outline-none transition"
+              />
+            </div>
+          </div>
+
+          <div className="flex justify-end gap-3 pt-3 border-t border-white/10">
+            <Button
+              type="button"
+              variant="secondary"
+              onClick={() => {
+                setEditModalOpen(false);
+                setEditingItem(null);
+              }}
+            >
+              Cancel
+            </Button>
+            <Button
+              type="submit"
+              variant="primary"
+              disabled={editSaving || !editFoodForm.name.trim() || !editFoodForm.calories}
+            >
+              <Edit3 size={15} />
+              <span>{editSaving ? 'Saving Changes...' : 'Save Changes'}</span>
             </Button>
           </div>
         </form>
