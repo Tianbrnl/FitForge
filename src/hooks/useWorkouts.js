@@ -1,5 +1,7 @@
 import { useEffect, useState } from 'react';
 import { supabase } from '../services/supabase';
+import { getExercises } from '../services/exerciseService';
+import { exercisesData } from '../data/exercises';
 
 export function useWorkouts() {
   const [workouts, setWorkouts] = useState([]);
@@ -53,7 +55,7 @@ export function useWorkouts() {
       setLoading(false);
       return;
     }
-
+    const sanityExercises = await getExercises();
     const formattedWorkouts = (data || []).map((workout) => ({
       id: workout.id,
       name: workout.name,
@@ -63,13 +65,25 @@ export function useWorkouts() {
 
       exercises: (workout.workout_exercises || [])
         .sort((a, b) => a.order_index - b.order_index)
-        .map((exercise) => ({
-          exerciseId: exercise.exercise_id,
-          sets: exercise.sets,
-          reps: exercise.reps,
-          weight: exercise.weight ?? 0,
-          rest: exercise.rest_seconds ?? 60
-        })),
+        .map((exercise) => {
+          const sanityExercise = (sanityExercises || []).find(
+            (item) => item.id === exercise.exercise_id || item.exerciseId === exercise.exercise_id
+          );
+          const staticExercise = exercisesData.find(
+            (item) => item.id === exercise.exercise_id
+          );
+
+          return {
+            exerciseId: exercise.exercise_id,
+            name: sanityExercise?.name || staticExercise?.name || exercise.exercise_id,
+            muscle: sanityExercise?.muscleGroup || staticExercise?.muscle || staticExercise?.muscleGroup || 'Full Body',
+            type: sanityExercise?.category || staticExercise?.type || 'strength',
+            sets: exercise.sets,
+            reps: exercise.reps,
+            weight: exercise.weight ?? 0,
+            rest: exercise.rest_seconds ?? 60
+          };
+        }),
 
       createdAt: workout.created_at,
       updatedAt: workout.updated_at

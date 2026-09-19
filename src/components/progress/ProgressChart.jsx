@@ -6,7 +6,8 @@ export default function ProgressChart({
   type = 'bar', // 'bar' | 'line'
   data = [],
   height = 220,
-  unit = ''
+  unit = '',
+  action = null
 }) {
   const [hoveredIdx, setHoveredIdx] = useState(null);
 
@@ -15,8 +16,11 @@ export default function ProgressChart({
 
     return (
       <Card className="p-6">
-        <div className="flex justify-between items-center mb-6">
-          <h4 className="text-base font-bold text-white tracking-tight">{title}</h4>
+        <div className="flex justify-between items-center mb-6 flex-wrap gap-2">
+          <div className="flex items-center gap-2.5">
+            <h4 className="text-base font-bold text-white tracking-tight">{title}</h4>
+            {action}
+          </div>
           <span className="text-xs text-gray-400">Past 7 Days</span>
         </div>
 
@@ -47,8 +51,8 @@ export default function ProgressChart({
                     ${item.isToday
                       ? 'bg-gradient-to-t from-[#CCFF00] to-[#00E5FF] shadow-[0_0_12px_rgba(204,255,0,0.3)]'
                       : item.completed
-                      ? 'bg-[#CCFF00] shadow-[0_0_10px_rgba(204,255,0,0.2)]'
-                      : 'bg-white/10'
+                        ? 'bg-[#CCFF00] shadow-[0_0_10px_rgba(204,255,0,0.2)]'
+                        : 'bg-white/10'
                     }
                     ${isHovered ? 'scale-y-105' : 'scale-y-100'}
                   `}
@@ -95,8 +99,11 @@ export default function ProgressChart({
 
   return (
     <Card className="p-6">
-      <div className="flex justify-between items-center mb-4">
-        <h4 className="text-base font-bold text-white tracking-tight">{title}</h4>
+      <div className="flex justify-between items-center mb-4 flex-wrap gap-2">
+        <div className="flex items-center gap-2.5">
+          <h4 className="text-base font-bold text-white tracking-tight">{title}</h4>
+          {action}
+        </div>
         <span className="text-xs text-[#CCFF00] font-bold">
           {data[0]?.weight} kg → {data[data.length - 1]?.weight} kg
         </span>
