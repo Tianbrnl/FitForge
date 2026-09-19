@@ -1,5 +1,5 @@
 import React from 'react';
-import { Plus, Trash2, Utensils } from 'lucide-react';
+import { Plus, Trash2, Utensils, Edit3 } from 'lucide-react';
 import Card from '../common/Card';
 import Button from '../common/Button';
 
@@ -9,7 +9,8 @@ export default function MealCard({
   icon: Icon = Utensils,
   items = [],
   onOpenAddModal,
-  onRemoveItem
+  onRemoveItem,
+  onEditItem
 }) {
   const totalCalories = items.reduce((sum, item) => sum + (item.calories || 0), 0);
   const totalProtein = items.reduce((sum, item) => sum + (item.protein || 0), 0);
@@ -65,16 +66,30 @@ export default function MealCard({
                 </p>
               </div>
 
-              {onRemoveItem && (
-                <button
-                  onClick={() => onRemoveItem(mealKey, item.id)}
-                  className="text-gray-500 hover:text-red-400 p-1 rounded transition duration-150 cursor-pointer"
-                  title="Remove food"
-                  aria-label="Remove food"
-                >
-                  <Trash2 size={14} />
-                </button>
-              )}
+              <div className="flex items-center gap-1 shrink-0 ml-2">
+                {onEditItem && (
+                  <button
+                    type="button"
+                    onClick={() => onEditItem(mealKey, item)}
+                    className="text-gray-500 hover:text-[#CCFF00] p-1.5 rounded-lg hover:bg-white/5 transition duration-150 cursor-pointer"
+                    title="Edit food"
+                    aria-label="Edit food"
+                  >
+                    <Edit3 size={14} />
+                  </button>
+                )}
+                {onRemoveItem && (
+                  <button
+                    type="button"
+                    onClick={() => onRemoveItem(mealKey, item.id)}
+                    className="text-gray-500 hover:text-red-400 p-1.5 rounded-lg hover:bg-white/5 transition duration-150 cursor-pointer"
+                    title="Remove food"
+                    aria-label="Remove food"
+                  >
+                    <Trash2 size={14} />
+                  </button>
+                )}
+              </div>
             </div>
           ))
         )}
