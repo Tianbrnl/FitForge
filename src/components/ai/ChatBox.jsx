@@ -4,6 +4,8 @@ import { useNavigate } from 'react-router-dom';
 import ChatMessage from './ChatMessage';
 import ChatInput from './ChatInput';
 import { supabase } from '../../services/supabase';
+import { useAuth } from '../../context/AuthContext';
+
 const SUGGESTED_QUESTIONS = [
   "What workout should I do today?",
   "What should I eat after my workout?",
@@ -11,37 +13,67 @@ const SUGGESTED_QUESTIONS = [
   "How can I improve my stamina?"
 ];
 
-const INITIAL_MESSAGES = [
-  {
-    id: 1,
-    sender: 'ai',
-    text: "Hey Alex! I'm your FitForge AI Coach. How can I help you crush your training or nutrition goals today?",
-    time: '10:00 AM'
-  }
-];
+const createGreeting = (name) => {
+  const greetedName = name && name !== 'Athlete' ? name : 'there';
+  return `Hey ${greetedName}! I'm your FitForge AI Coach. How can I help you crush your training or nutrition goals today?`;
+};
 
 export default function ChatBox({ onClose, isFullPage = false }) {
-  const [session, setSession] = useState(null);
-  const [messages, setMessages] = useState(INITIAL_MESSAGES);
+  const { user, profile, session: authSession } = useAuth();
+  const [session, setSession] = useState(authSession || null);
+
+  const displayName =
+    profile?.full_name ||
+    profile?.name ||
+    user?.user_metadata?.full_name ||
+    user?.user_metadata?.name ||
+    (user?.email ? user.email.split('@')[0] : '') ||
+    'Athlete';
+  const firstName = displayName.split(' ')[0] || displayName;
+
+  const [messages, setMessages] = useState(() => [
+    {
+      id: 1,
+      sender: 'ai',
+      text: createGreeting(firstName !== 'Athlete' ? firstName : ''),
+      time: new Date().toLocaleTimeString([], {
+        hour: '2-digit',
+        minute: '2-digit'
+      })
+    }
+  ]);
   const [isTyping, setIsTyping] = useState(false);
   const messagesEndRef = useRef(null);
   const navigate = useNavigate();
 
   useEffect(() => {
-    const getSession = async () => {
-      const { data } = await supabase.auth.getSession();
-      setSession(data.session);
-    };
+    if (authSession) {
+      setSession(authSession);
+    } else {
+      const getSession = async () => {
+        const { data } = await supabase.auth.getSession();
+        if (data?.session) setSession(data.session);
+      };
+      getSession();
+    }
+  }, [authSession]);
 
-    getSession();
-  }, []);
-  const scrollToBottom = () => {
-    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
-  };
-
+  // Update initial welcome message when user profile/name loads
   useEffect(() => {
-    scrollToBottom();
-  }, [messages, isTyping]);
+    if (firstName && firstName !== 'Athlete') {
+      setMessages((prev) => {
+        if (prev.length > 0 && prev[0].id === 1 && prev[0].sender === 'ai') {
+          const newGreeting = createGreeting(firstName);
+          if (prev[0].text !== newGreeting) {
+            const updated = [...prev];
+            updated[0] = { ...updated[0], text: newGreeting };
+            return updated;
+          }
+        }
+        return prev;
+      });
+    }
+  }, [firstName]);
 
 
 
@@ -67,10 +99,11 @@ export default function ChatBox({ onClose, isFullPage = false }) {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          Authorization: `Bearer ${session?.access_token}`
+          Authorization: `Bearer ${session?.access_token || authSession?.access_token}`
         },
         body: JSON.stringify({
-          message: text
+          message: text,
+          userName: firstName !== 'Athlete' ? firstName : undefined
         })
       });
 

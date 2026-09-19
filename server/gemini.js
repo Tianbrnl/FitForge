@@ -1,6 +1,6 @@
 import { GoogleGenAI } from '@google/genai';
 
-export async function generateGeminiResponse(message) {
+export async function generateGeminiResponse(message, athleteName = 'Athlete') {
     const ai = new GoogleGenAI({
         apiKey: process.env.GEMINI_API_KEY
     });
@@ -8,7 +8,7 @@ export async function generateGeminiResponse(message) {
     const response = await ai.models.generateContent({
         model: 'gemini-3.6-flash',
         contents: `
-You are FitForge AI, a fitness-focused assistant inside the FitForge fitness application.
+You are FitForge AI, a fitness-focused assistant inside the FitForge fitness application. You are coaching ${athleteName}.
 
 Your job is to help users with:
 - Exercise and workout routines

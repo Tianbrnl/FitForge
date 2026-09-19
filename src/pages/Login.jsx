@@ -14,6 +14,32 @@ export default function Login() {
   const [showPassword, setShowPassword] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
   const [errorMsg, setErrorMsg] = useState('');
+  const [resetMsg, setResetMsg] = useState('');
+
+  const handleForgotPassword = async () => {
+    setErrorMsg('');
+    setResetMsg('');
+
+    if (!email) {
+      setErrorMsg('Please enter your email address first.');
+      return;
+    }
+
+    setIsLoading(true);
+
+    const { error } = await supabase.auth.resetPasswordForEmail(email, {
+      redirectTo: `${window.location.origin}/reset-password`,
+    });
+
+    setIsLoading(false);
+
+    if (error) {
+      setErrorMsg(error.message);
+      return;
+    }
+
+    setResetMsg('Password reset link sent. Please check your email.');
+  };
 
   const handleLogin = async (e) => {
     e.preventDefault();
@@ -93,6 +119,11 @@ export default function Login() {
           {errorMsg}
         </div>
       )}
+      {resetMsg && (
+        <div className="p-3 bg-[#CCFF00]/10 border border-[#CCFF00]/25 rounded-xl text-[#CCFF00] text-xs mb-4">
+          {resetMsg}
+        </div>
+      )}
 
       <form onSubmit={handleLogin} className="flex flex-col gap-4">
         <Input
@@ -112,8 +143,9 @@ export default function Login() {
             </label>
             <button
               type="button"
-              onClick={() => alert("Password reset simulation: A temporary reset link has been sent to your email.")}
-              className="text-xs text-[#CCFF00] hover:underline cursor-pointer"
+              onClick={handleForgotPassword}
+              disabled={isLoading}
+              className="text-xs text-[#CCFF00] hover:underline cursor-pointer disabled:opacity-50 disabled:pointer-events-none"
             >
               Forgot Password?
             </button>

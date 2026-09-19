@@ -18,6 +18,7 @@ import AITrainer from './pages/AITrainer';
 import Profile from './pages/Profile';
 import Login from './pages/Login';
 import Register from './pages/Register';
+import ResetPassword from './pages/ResetPassword';
 
 import { AuthProvider } from './context/AuthContext';
 
@@ -46,6 +47,7 @@ export default function App() {
         <Route element={<AuthLayout />}>
           <Route path="/login" element={<Login />} />
           <Route path="/register" element={<Register />} />
+          <Route path="/reset-password" element={<ResetPassword />} />
         </Route>
         </Routes>
       </AuthProvider>
