@@ -1,11 +1,11 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { 
-  Plus, 
-  Dumbbell, 
-  Search, 
-  Filter, 
-  History, 
+import {
+  Plus,
+  Dumbbell,
+  Search,
+  Filter,
+  History,
   RotateCcw,
   BookOpen,
   Info,
@@ -15,15 +15,37 @@ import WorkoutCard from '../components/workout/WorkoutCard';
 import WorkoutHistoryList from '../components/workout/WorkoutHistoryList';
 import { useWorkouts } from '../hooks/useWorkouts';
 import { useWorkoutHistory } from '../hooks/useWorkoutHistory';
-import { exercisesData, MUSCLE_GROUPS, EQUIPMENT_LIST, DIFFICULTY_LEVELS } from '../data/exercises';
+import { MUSCLE_GROUPS, EQUIPMENT_LIST, DIFFICULTY_LEVELS } from '../data/exercises';
+import { getExercises } from '../services/exerciseService';
 
 export default function Workouts() {
   const navigate = useNavigate();
-  const { workouts, deleteWorkout, resetToDefaults, clearAllWorkouts } = useWorkouts();
+  const {
+    workouts,
+    deleteWorkout,
+    clearAllWorkouts,
+    resetToDefaults
+  } = useWorkouts();
+
+  const [exercisesData, setExercisesData] = useState([]);
+  const [exercisesLoading, setExercisesLoading] = useState(true);
   const { history, deleteSession } = useWorkoutHistory();
 
   const [activeTab, setActiveTab] = useState('my-workouts'); // 'my-workouts' | 'library' | 'history'
+  useEffect(() => {
+    async function loadExercises() {
+      try {
+        const exercises = await getExercises();
+        setExercisesData(exercises);
+      } catch (error) {
+        console.error('Failed to load exercises from Sanity:', error);
+      } finally {
+        setExercisesLoading(false);
+      }
+    }
 
+    loadExercises();
+  }, []);
   // Exercise Library Filters
   const [librarySearch, setLibrarySearch] = useState('');
   const [libraryMuscle, setLibraryMuscle] = useState('All');
@@ -56,7 +78,13 @@ export default function Workouts() {
 
       return matchesMuscle && matchesEquipment && matchesDifficulty && matchesQuery;
     });
-  }, [librarySearch, libraryMuscle, libraryEquipment, libraryDifficulty]);
+  }, [
+    exercisesData,
+    librarySearch,
+    libraryMuscle,
+    libraryEquipment,
+    libraryDifficulty
+  ]);
 
   return (
     <div className="max-w-7xl mx-auto px-4 sm:px-6 py-6 sm:py-8">
