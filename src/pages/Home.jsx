@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
   Dumbbell,
@@ -12,11 +12,123 @@ import {
 import Button from '../components/common/Button';
 import Card from '../components/common/Card';
 import WorkoutCard from '../components/workout/WorkoutCard';
-import { workoutsData } from '../data/workouts';
+import { useAuth } from '../context/AuthContext';
+import { useWorkouts } from '../hooks/useWorkouts';
+import { useLocalStorage } from '../hooks/useLocalStorage';
+import { initialNutritionData } from '../data/nutrition';
+import { supabase } from '../services/supabase';
 
 export default function Home() {
   const navigate = useNavigate();
-  const featuredWorkouts = workoutsData.slice(0, 3);
+  const { user } = useAuth();
+  const { workouts } = useWorkouts();
+  const [nutritionData] = useLocalStorage('fitforge_nutrition', initialNutritionData);
+
+  const featuredWorkouts = workouts && workouts.length > 0 ? workouts.slice(0, 3) : [];
+
+  // Live Nutrition Protocol state
+  const [liveNutrition, setLiveNutrition] = useState({
+    caloriesConsumed: 0,
+    caloriesTarget: 2450,
+    proteinConsumed: 0,
+    proteinTarget: 175
+  });
+
+  useEffect(() => {
+    let isMounted = true;
+
+    async function loadLiveNutrition() {
+      // Calculate from local storage nutritionData as initial baseline
+      let localCal = 0;
+      let localProt = 0;
+      if (nutritionData?.meals) {
+        Object.values(nutritionData.meals).forEach((items) => {
+          (items || []).forEach((item) => {
+            localCal += Number(item.calories) || 0;
+            localProt += Number(item.protein) || 0;
+          });
+        });
+      }
+
+      const defaultCalTarget = nutritionData?.dailyGoals?.calories || 2450;
+      const defaultProtTarget = nutritionData?.dailyGoals?.protein || 175;
+
+      if (!user?.id) {
+        if (isMounted) {
+          setLiveNutrition({
+            caloriesConsumed: Math.round(localCal),
+            caloriesTarget: defaultCalTarget,
+            proteinConsumed: Math.round(localProt),
+            proteinTarget: defaultProtTarget
+          });
+        }
+        return;
+      }
+
+      try {
+        const todayStr = new Date().toISOString().split('T')[0];
+
+        const [targetsRes, logsRes] = await Promise.all([
+          supabase
+            .from('nutrition_targets')
+            .select('calories, protein')
+            .eq('user_id', user.id)
+            .maybeSingle(),
+          supabase
+            .from('meal_logs')
+            .select('calories, protein')
+            .eq('user_id', user.id)
+            .eq('consumed_at', todayStr)
+        ]);
+
+        if (!isMounted) return;
+
+        const calTarget = targetsRes.data?.calories || defaultCalTarget;
+        const protTarget = targetsRes.data?.protein || defaultProtTarget;
+
+        let calConsumed = 0;
+        let protConsumed = 0;
+
+        if (logsRes.data && logsRes.data.length > 0) {
+          logsRes.data.forEach((log) => {
+            calConsumed += Number(log.calories) || 0;
+            protConsumed += Number(log.protein) || 0;
+          });
+        } else {
+          calConsumed = localCal;
+          protConsumed = localProt;
+        }
+
+        setLiveNutrition({
+          caloriesConsumed: Math.round(calConsumed),
+          caloriesTarget: Math.round(calTarget),
+          proteinConsumed: Math.round(protConsumed),
+          proteinTarget: Math.round(protTarget)
+        });
+      } catch (err) {
+        console.error('Error fetching live nutrition in Home:', err);
+      }
+    }
+
+    loadLiveNutrition();
+
+    return () => {
+      isMounted = false;
+    };
+  }, [user?.id, nutritionData]);
+
+  const calPercent = Math.min(
+    100,
+    liveNutrition.caloriesTarget > 0
+      ? Math.round((liveNutrition.caloriesConsumed / liveNutrition.caloriesTarget) * 100)
+      : 0
+  );
+  const protPercent = Math.min(
+    100,
+    liveNutrition.proteinTarget > 0
+      ? Math.round((liveNutrition.proteinConsumed / liveNutrition.proteinTarget) * 100)
+      : 0
+  );
 
   return (
     <div>
@@ -63,9 +175,6 @@ export default function Home() {
               <span>Explore Workouts</span>
             </Button>
           </div>
-
-
-
         </div>
       </section>
 
@@ -148,11 +257,31 @@ export default function Home() {
             </Button>
           </div>
 
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-            {featuredWorkouts.map((workout) => (
-              <WorkoutCard key={workout.id} workout={workout} />
-            ))}
-          </div>
+          {featuredWorkouts.length > 0 ? (
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+              {featuredWorkouts.map((workout) => (
+                <WorkoutCard key={workout.id} workout={workout} />
+              ))}
+            </div>
+          ) : (
+            <div className="bg-[#121620] border border-white/5 rounded-2xl p-10 text-center max-w-lg mx-auto">
+              <div className="w-14 h-14 rounded-2xl bg-white/5 mx-auto flex items-center justify-center mb-4 text-[#CCFF00]">
+                <Dumbbell size={24} />
+              </div>
+              <h3 className="text-xl font-bold text-white mb-2">No Routines Created Yet</h3>
+              <p className="text-sm text-gray-400 mb-6">
+                Build your custom training routines tailored for progressive overload and they will appear here.
+              </p>
+              <Button
+                variant="primary"
+                onClick={() => navigate('/workouts')}
+                className="gap-2"
+              >
+                <Dumbbell size={16} />
+                <span>Build a Workout</span>
+              </Button>
+            </div>
+          )}
         </div>
       </section>
 
@@ -178,20 +307,30 @@ export default function Home() {
                   <div>
                     <div className="flex justify-between text-xs font-medium mb-1.5">
                       <span className="text-white font-bold">Calories</span>
-                      <span className="text-[#CCFF00] font-semibold">1,920 / 2,450 kcal</span>
+                      <span className="text-[#CCFF00] font-semibold">
+                        {liveNutrition.caloriesConsumed.toLocaleString()} / {liveNutrition.caloriesTarget.toLocaleString()} kcal
+                      </span>
                     </div>
                     <div className="w-full h-2 rounded-full bg-white/10 overflow-hidden">
-                      <div className="h-full rounded-full bg-[#CCFF00] w-[78%]" />
+                      <div
+                        className="h-full rounded-full bg-[#CCFF00] transition-all duration-500"
+                        style={{ width: `${calPercent}%` }}
+                      />
                     </div>
                   </div>
 
                   <div>
                     <div className="flex justify-between text-xs font-medium mb-1.5">
                       <span className="text-white font-bold">Protein</span>
-                      <span className="text-[#00E5FF] font-semibold">142 / 175g</span>
+                      <span className="text-[#00E5FF] font-semibold">
+                        {liveNutrition.proteinConsumed} / {liveNutrition.proteinTarget}g
+                      </span>
                     </div>
                     <div className="w-full h-2 rounded-full bg-white/10 overflow-hidden">
-                      <div className="h-full rounded-full bg-[#00E5FF] w-[81%]" />
+                      <div
+                        className="h-full rounded-full bg-[#00E5FF] transition-all duration-500"
+                        style={{ width: `${protPercent}%` }}
+                      />
                     </div>
                   </div>
                 </div>
