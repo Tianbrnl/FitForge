@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { Plus, Dumbbell, Save, ArrowLeft, AlertCircle } from 'lucide-react';
 import { useWorkouts } from '../hooks/useWorkouts';
@@ -22,6 +22,18 @@ export default function CreateWorkout() {
   const [selectedExercises, setSelectedExercises] = useState(
     () => existingWorkout?.exercises || []
   );
+  useEffect(() => {
+    if (!isEditing || !existingWorkout) return;
+
+    setName(existingWorkout.name || '');
+    setDescription(existingWorkout.description || '');
+    setTargetMuscle(
+      existingWorkout.targetMuscle ||
+      existingWorkout.muscleGroup ||
+      'Chest'
+    );
+    setSelectedExercises(existingWorkout.exercises || []);
+  }, [isEditing, existingWorkout]);
   const [selectorOpen, setSelectorOpen] = useState(false);
   const [errorMessage, setErrorMessage] = useState('');
 

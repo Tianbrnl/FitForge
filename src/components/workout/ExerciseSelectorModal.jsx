@@ -1,7 +1,12 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import { Search, Plus, Check, X, Dumbbell } from 'lucide-react';
-import { exercisesData, MUSCLE_GROUPS, EQUIPMENT_LIST, DIFFICULTY_LEVELS } from '../../data/exercises';
+import {
+  MUSCLE_GROUPS,
+  EQUIPMENT_LIST,
+  DIFFICULTY_LEVELS
+} from '../../data/exercises';
 
+import { getExercises } from '../../services/exerciseService';
 export default function ExerciseSelectorModal({
   isOpen,
   onClose,
@@ -12,38 +17,89 @@ export default function ExerciseSelectorModal({
   const [muscleFilter, setMuscleFilter] = useState('All');
   const [equipmentFilter, setEquipmentFilter] = useState('All');
   const [difficultyFilter, setDifficultyFilter] = useState('All');
+  const [exercisesData, setExercisesData] = useState([]);
+  const [exercisesLoading, setExercisesLoading] = useState(true);
+
+  useEffect(() => {
+    async function loadExercises() {
+      try {
+        const exercises = await getExercises();
+        setExercisesData(exercises);
+      } catch (error) {
+        console.error('Failed to load exercises from Sanity:', error);
+      } finally {
+        setExercisesLoading(false);
+      }
+    }
+
+    if (isOpen) {
+      loadExercises();
+    }
+  }, [isOpen]);
+  useEffect(() => {
+    async function loadExercises() {
+      try {
+        const exercises = await getExercises();
+        setExercisesData(exercises);
+      } catch (error) {
+        console.error('Failed to load exercises:', error);
+      } finally {
+        setExercisesLoading(false);
+      }
+    }
+    loadExercises();
+  }, []);
 
   const filteredExercises = useMemo(() => {
     return exercisesData.filter((ex) => {
+      const muscleGroup = ex.muscleGroup || '';
+      const muscle = ex.muscle || '';
+      const equipment = ex.equipment || '';
+      const difficulty = ex.difficulty || '';
+      const name = ex.name || '';
+      const description = ex.description || '';
+
       const matchesMuscle =
         muscleFilter === 'All' ||
-        ex.muscleGroup.toLowerCase() === muscleFilter.toLowerCase() ||
-        ex.muscle.toLowerCase() === muscleFilter.toLowerCase();
+        muscleGroup.toLowerCase() === muscleFilter.toLowerCase() ||
+        muscle.toLowerCase() === muscleFilter.toLowerCase();
 
       const matchesEquipment =
         equipmentFilter === 'All' ||
-        ex.equipment.toLowerCase().includes(equipmentFilter.toLowerCase());
+        equipment.toLowerCase().includes(equipmentFilter.toLowerCase());
 
       const matchesDifficulty =
         difficultyFilter === 'All' ||
-        ex.difficulty.toLowerCase() === difficultyFilter.toLowerCase();
+        difficulty.toLowerCase() === difficultyFilter.toLowerCase();
 
       const q = searchQuery.toLowerCase().trim();
+
       const matchesQuery =
         !q ||
-        ex.name.toLowerCase().includes(q) ||
-        ex.muscleGroup.toLowerCase().includes(q) ||
-        ex.equipment.toLowerCase().includes(q);
+        name.toLowerCase().includes(q) ||
+        muscleGroup.toLowerCase().includes(q) ||
+        equipment.toLowerCase().includes(q);
 
-      return matchesMuscle && matchesEquipment && matchesDifficulty && matchesQuery;
+      return (
+        matchesMuscle &&
+        matchesEquipment &&
+        matchesDifficulty &&
+        matchesQuery
+      );
     });
-  }, [searchQuery, muscleFilter, equipmentFilter, difficultyFilter]);
+  }, [
+    exercisesData,
+    searchQuery,
+    muscleFilter,
+    equipmentFilter,
+    difficultyFilter
+  ]);
 
   if (!isOpen) return null;
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-black/75 backdrop-blur-xs animate-in fade-in duration-150">
-      <div 
+      <div
         className="w-full max-w-3xl max-h-[90vh] bg-[#161b22] border border-slate-800 rounded-2xl flex flex-col shadow-2xl overflow-hidden"
         role="dialog"
         aria-modal="true"
@@ -147,7 +203,12 @@ export default function ExerciseSelectorModal({
 
         {/* Exercises Scroll List */}
         <div className="flex-1 overflow-y-auto p-4 space-y-2 bg-[#0d1117] divide-y divide-slate-800/50">
-          {filteredExercises.length === 0 ? (
+          {exercisesLoading ? (
+            <div className="text-center py-12 text-slate-500 text-xs">
+              Loading exercises...
+            </div>
+          ) : filteredExercises.length === 0 ? (
+
             <div className="text-center py-12 text-slate-500 text-xs">
               No exercises match your search filters.
             </div>
