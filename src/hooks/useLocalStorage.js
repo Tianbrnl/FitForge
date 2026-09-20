@@ -14,6 +14,11 @@ export function useLocalStorage(key, initialValue) {
   useEffect(() => {
     try {
       window.localStorage.setItem(key, JSON.stringify(value));
+      window.dispatchEvent(
+        new CustomEvent('fitforge_storage_update', {
+          detail: { key, value }
+        })
+      );
     } catch (error) {
       console.warn(`Error setting localStorage key "${key}":`, error);
     }

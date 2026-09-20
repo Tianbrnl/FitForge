@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
   Dumbbell,
@@ -12,123 +12,32 @@ import {
 import Button from '../components/common/Button';
 import Card from '../components/common/Card';
 import WorkoutCard from '../components/workout/WorkoutCard';
-import { useAuth } from '../context/AuthContext';
 import { useWorkouts } from '../hooks/useWorkouts';
-import { useLocalStorage } from '../hooks/useLocalStorage';
-import { initialNutritionData } from '../data/nutrition';
-import { supabase } from '../services/supabase';
+import { useNutrition } from '../hooks/useNutrition';
 
 export default function Home() {
   const navigate = useNavigate();
-  const { user } = useAuth();
   const { workouts } = useWorkouts();
-  const [nutritionData] = useLocalStorage('fitforge_nutrition', initialNutritionData);
+  const {
+    todayCaloriesConsumed: caloriesConsumed,
+    dailyCalorieGoal: caloriesTarget,
+    todayProteinConsumed: proteinConsumed,
+    dailyProteinGoal: proteinTarget,
+    caloriePercent: rawCalPercent,
+    proteinPercent: rawProtPercent
+  } = useNutrition();
 
   const featuredWorkouts = workouts && workouts.length > 0 ? workouts.slice(0, 3) : [];
 
-  // Live Nutrition Protocol state
-  const [liveNutrition, setLiveNutrition] = useState({
-    caloriesConsumed: 0,
-    caloriesTarget: 2450,
-    proteinConsumed: 0,
-    proteinTarget: 175
-  });
+  const liveNutrition = {
+    caloriesConsumed,
+    caloriesTarget,
+    proteinConsumed,
+    proteinTarget
+  };
 
-  useEffect(() => {
-    let isMounted = true;
-
-    async function loadLiveNutrition() {
-      // Calculate from local storage nutritionData as initial baseline
-      let localCal = 0;
-      let localProt = 0;
-      if (nutritionData?.meals) {
-        Object.values(nutritionData.meals).forEach((items) => {
-          (items || []).forEach((item) => {
-            localCal += Number(item.calories) || 0;
-            localProt += Number(item.protein) || 0;
-          });
-        });
-      }
-
-      const defaultCalTarget = nutritionData?.dailyGoals?.calories || 2450;
-      const defaultProtTarget = nutritionData?.dailyGoals?.protein || 175;
-
-      if (!user?.id) {
-        if (isMounted) {
-          setLiveNutrition({
-            caloriesConsumed: Math.round(localCal),
-            caloriesTarget: defaultCalTarget,
-            proteinConsumed: Math.round(localProt),
-            proteinTarget: defaultProtTarget
-          });
-        }
-        return;
-      }
-
-      try {
-        const todayStr = new Date().toISOString().split('T')[0];
-
-        const [targetsRes, logsRes] = await Promise.all([
-          supabase
-            .from('nutrition_targets')
-            .select('calories, protein')
-            .eq('user_id', user.id)
-            .maybeSingle(),
-          supabase
-            .from('meal_logs')
-            .select('calories, protein')
-            .eq('user_id', user.id)
-            .eq('consumed_at', todayStr)
-        ]);
-
-        if (!isMounted) return;
-
-        const calTarget = targetsRes.data?.calories || defaultCalTarget;
-        const protTarget = targetsRes.data?.protein || defaultProtTarget;
-
-        let calConsumed = 0;
-        let protConsumed = 0;
-
-        if (logsRes.data && logsRes.data.length > 0) {
-          logsRes.data.forEach((log) => {
-            calConsumed += Number(log.calories) || 0;
-            protConsumed += Number(log.protein) || 0;
-          });
-        } else {
-          calConsumed = localCal;
-          protConsumed = localProt;
-        }
-
-        setLiveNutrition({
-          caloriesConsumed: Math.round(calConsumed),
-          caloriesTarget: Math.round(calTarget),
-          proteinConsumed: Math.round(protConsumed),
-          proteinTarget: Math.round(protTarget)
-        });
-      } catch (err) {
-        console.error('Error fetching live nutrition in Home:', err);
-      }
-    }
-
-    loadLiveNutrition();
-
-    return () => {
-      isMounted = false;
-    };
-  }, [user?.id, nutritionData]);
-
-  const calPercent = Math.min(
-    100,
-    liveNutrition.caloriesTarget > 0
-      ? Math.round((liveNutrition.caloriesConsumed / liveNutrition.caloriesTarget) * 100)
-      : 0
-  );
-  const protPercent = Math.min(
-    100,
-    liveNutrition.proteinTarget > 0
-      ? Math.round((liveNutrition.proteinConsumed / liveNutrition.proteinTarget) * 100)
-      : 0
-  );
+  const calPercent = Math.min(100, rawCalPercent);
+  const protPercent = Math.min(100, rawProtPercent);
 
   return (
     <div>
