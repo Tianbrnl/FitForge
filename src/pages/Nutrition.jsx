@@ -9,13 +9,15 @@ import {
   Cookie,
   Sparkles,
   Edit3,
-  AlertCircle
+  AlertCircle,
+  Lock
 } from 'lucide-react';
 import Card from '../components/common/Card';
 import Button from '../components/common/Button';
 import Modal from '../components/common/Modal';
 import ProgressBar from '../components/common/ProgressBar';
 import MealCard from '../components/nutrition/MealCard';
+import AuthRequiredModal from '../components/common/AuthRequiredModal';
 import { initialNutritionData } from '../data/nutrition';
 import { useLocalStorage } from '../hooks/useLocalStorage';
 import { calcPercent } from '../utils/formatters';
@@ -33,14 +35,15 @@ const QUICK_PRESETS = [
 
 export default function Nutrition() {
   const { user } = useAuth();
+  const [authModalOpen, setAuthModalOpen] = useState(false);
   const [nutritionData, setNutritionData] = useLocalStorage(
     'fitforge_nutrition',
     initialNutritionData
   );
-  const [targetsLoading, setTargetsLoading] = useState(true);
+  const [_targetsLoading, setTargetsLoading] = useState(true);
   const [targetsSaving, setTargetsSaving] = useState(false);
-  const [mealsLoading, setMealsLoading] = useState(true);
-  const [mealSaving, setMealSaving] = useState(false);
+  const [_mealsLoading, setMealsLoading] = useState(true);
+  const [_mealSaving, setMealSaving] = useState(false);
   useEffect(() => {
     async function loadNutritionTargets() {
       if (!user?.id) {
@@ -216,6 +219,10 @@ export default function Nutrition() {
   const { dailyGoals } = nutritionData;
 
   const handleOpenAddModal = (mealKey) => {
+    if (!user?.id) {
+      setAuthModalOpen(true);
+      return;
+    }
     setActiveMealKey(mealKey);
     setFoodForm({
       name: '',
@@ -243,7 +250,7 @@ export default function Nutrition() {
     if (e) e.preventDefault();
 
     if (!user?.id) {
-      console.error('User is not logged in.');
+      setAuthModalOpen(true);
       return;
     }
 
@@ -499,6 +506,10 @@ export default function Nutrition() {
 
   // Open Target Editing modal
   const handleOpenEditTarget = (mode) => {
+    if (!user?.id) {
+      setAuthModalOpen(true);
+      return;
+    }
     setTargetModalMode(mode);
     setTargetForm({
       calories: dailyGoals.calories.toString(),
@@ -635,6 +646,22 @@ export default function Nutrition() {
           Monitor your caloric expenditure and balance macronutrients for clean recovery, muscle preservation, and sustained power output.
         </p>
       </div>
+
+      {!user?.id && (
+        <div className="mb-8 p-4 rounded-2xl bg-[#CCFF00]/10 border border-[#CCFF00]/25 flex items-center justify-between gap-4 flex-wrap">
+          <div className="flex items-center gap-2.5 text-xs text-gray-300">
+            <Lock size={16} className="text-[#CCFF00] shrink-0" />
+            <span>You are viewing sample nutrition targets in guest mode. Sign in to log your daily meals and customize macro targets.</span>
+          </div>
+          <button
+            type="button"
+            onClick={() => setAuthModalOpen(true)}
+            className="px-3.5 py-1.5 rounded-xl bg-[#CCFF00] hover:bg-[#b5e600] text-gray-950 text-xs font-bold transition cursor-pointer shrink-0"
+          >
+            Sign In to Track
+          </button>
+        </div>
+      )}
 
       {/* Daily Macro Progress Summary Card */}
       <Card glow="lime" className="p-8 mb-10">
@@ -1386,6 +1413,12 @@ export default function Nutrition() {
           </div>
         </form>
       </Modal>
+
+      <AuthRequiredModal
+        isOpen={authModalOpen}
+        onClose={() => setAuthModalOpen(false)}
+        feature="nutrition"
+      />
     </div>
   );
 }
