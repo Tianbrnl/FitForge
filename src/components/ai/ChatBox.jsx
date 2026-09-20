@@ -1,9 +1,9 @@
-import React, { useState, useRef, useEffect } from 'react';
-import { Bot, X, Sparkles, Maximize2 } from 'lucide-react';
+import React, { useState, useRef, useMemo } from 'react';
+import { Bot, X, Sparkles, Maximize2, Lock } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import ChatMessage from './ChatMessage';
 import ChatInput from './ChatInput';
-import { supabase } from '../../services/supabase';
+import AuthRequiredModal from '../common/AuthRequiredModal';
 import { useAuth } from '../../context/AuthContext';
 
 const SUGGESTED_QUESTIONS = [
@@ -20,7 +20,6 @@ const createGreeting = (name) => {
 
 export default function ChatBox({ onClose, isFullPage = false }) {
   const { user, profile, session: authSession } = useAuth();
-  const [session, setSession] = useState(authSession || null);
 
   const displayName =
     profile?.full_name ||
@@ -43,41 +42,28 @@ export default function ChatBox({ onClose, isFullPage = false }) {
     }
   ]);
   const [isTyping, setIsTyping] = useState(false);
+  const [authModalOpen, setAuthModalOpen] = useState(false);
   const messagesEndRef = useRef(null);
   const navigate = useNavigate();
 
-  useEffect(() => {
-    if (authSession) {
-      setSession(authSession);
-    } else {
-      const getSession = async () => {
-        const { data } = await supabase.auth.getSession();
-        if (data?.session) setSession(data.session);
-      };
-      getSession();
-    }
-  }, [authSession]);
-
-  // Update initial welcome message when user profile/name loads
-  useEffect(() => {
-    if (firstName && firstName !== 'Athlete') {
-      setMessages((prev) => {
-        if (prev.length > 0 && prev[0].id === 1 && prev[0].sender === 'ai') {
-          const newGreeting = createGreeting(firstName);
-          if (prev[0].text !== newGreeting) {
-            const updated = [...prev];
-            updated[0] = { ...updated[0], text: newGreeting };
-            return updated;
-          }
-        }
-        return prev;
-      });
-    }
-  }, [firstName]);
-
-
+  const displayMessages = useMemo(() => {
+    return messages.map((m) => {
+      if (m.id === 1 && m.sender === 'ai') {
+        return {
+          ...m,
+          text: createGreeting(firstName !== 'Athlete' ? firstName : '')
+        };
+      }
+      return m;
+    });
+  }, [messages, firstName]);
 
   const handleSendMessage = async (text) => {
+    if (!user?.id) {
+      setAuthModalOpen(true);
+      return;
+    }
+
     const now = new Date();
     const timeStr = now.toLocaleTimeString([], {
       hour: '2-digit',
@@ -99,7 +85,7 @@ export default function ChatBox({ onClose, isFullPage = false }) {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          Authorization: `Bearer ${session?.access_token || authSession?.access_token}`
+          Authorization: `Bearer ${authSession?.access_token}`
         },
         body: JSON.stringify({
           message: text,
@@ -206,7 +192,7 @@ export default function ChatBox({ onClose, isFullPage = false }) {
 
       {/* Messages Scroll Area */}
       <div className="flex-1 overflow-y-auto p-5 flex flex-col">
-        {messages.map((m) => (
+        {displayMessages.map((m) => (
           <ChatMessage key={m.id} message={m} />
         ))}
 
@@ -220,8 +206,32 @@ export default function ChatBox({ onClose, isFullPage = false }) {
         <div ref={messagesEndRef} />
       </div>
 
-      {/* Input Field */}
-      <ChatInput onSendMessage={handleSendMessage} disabled={isTyping} />
+      {/* Input Field or Guest Authentication Prompt */}
+      {!user?.id ? (
+        <div className="p-4 border-t border-white/10 bg-[#121825]/95 flex items-center justify-between gap-3 flex-wrap">
+          <div className="flex items-center gap-2.5 text-xs text-gray-300">
+            <div className="w-7 h-7 rounded-lg bg-[#CCFF00]/10 text-[#CCFF00] flex items-center justify-center shrink-0">
+              <Lock size={14} />
+            </div>
+            <span>Sign in to chat with your personal AI Fitness Coach.</span>
+          </div>
+          <button
+            type="button"
+            onClick={() => setAuthModalOpen(true)}
+            className="px-4 py-2 rounded-xl bg-[#CCFF00] hover:bg-[#b5e600] text-gray-950 text-xs font-bold transition shadow-[0_0_12px_rgba(204,255,0,0.25)] cursor-pointer shrink-0"
+          >
+            Sign In to Chat
+          </button>
+        </div>
+      ) : (
+        <ChatInput onSendMessage={handleSendMessage} disabled={isTyping} />
+      )}
+
+      <AuthRequiredModal
+        isOpen={authModalOpen}
+        onClose={() => setAuthModalOpen(false)}
+        feature="ai"
+      />
     </div>
   );
 }

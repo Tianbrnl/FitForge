@@ -13,6 +13,8 @@ import {
 } from 'lucide-react';
 import WorkoutCard from '../components/workout/WorkoutCard';
 import WorkoutHistoryList from '../components/workout/WorkoutHistoryList';
+import AuthRequiredModal from '../components/common/AuthRequiredModal';
+import { useAuth } from '../context/AuthContext';
 import { useWorkouts } from '../hooks/useWorkouts';
 import { useWorkoutHistory } from '../hooks/useWorkoutHistory';
 import { MUSCLE_GROUPS, EQUIPMENT_LIST, DIFFICULTY_LEVELS } from '../data/exercises';
@@ -20,6 +22,8 @@ import { getExercises } from '../services/exerciseService';
 
 export default function Workouts() {
   const navigate = useNavigate();
+  const { user } = useAuth();
+  const [authModalOpen, setAuthModalOpen] = useState(false);
   const {
     workouts,
     deleteWorkout,
@@ -28,10 +32,18 @@ export default function Workouts() {
   } = useWorkouts();
 
   const [exercisesData, setExercisesData] = useState([]);
-  const [exercisesLoading, setExercisesLoading] = useState(true);
+  const [_exercisesLoading, setExercisesLoading] = useState(true);
   const { history, deleteSession } = useWorkoutHistory();
 
   const [activeTab, setActiveTab] = useState('my-workouts'); // 'my-workouts' | 'library' | 'history'
+
+  const handleCreateWorkoutClick = () => {
+    if (!user?.id) {
+      setAuthModalOpen(true);
+      return;
+    }
+    navigate('/workouts/create');
+  };
   useEffect(() => {
     async function loadExercises() {
       try {
@@ -105,7 +117,7 @@ export default function Workouts() {
         <div className="flex items-center gap-2.5">
           <button
             type="button"
-            onClick={() => navigate('/workouts/create')}
+            onClick={handleCreateWorkoutClick}
             className="h-10 px-5 rounded-xl bg-emerald-500 hover:bg-emerald-400 text-slate-950 text-xs font-bold flex items-center gap-2 transition active:scale-95 shadow-[0_0_15px_rgba(16,185,129,0.3)] cursor-pointer"
           >
             <Plus size={16} strokeWidth={2.5} />
@@ -227,7 +239,7 @@ export default function Workouts() {
               <div className="flex items-center justify-center gap-3 flex-wrap">
                 <button
                   type="button"
-                  onClick={() => navigate('/workouts/create')}
+                  onClick={handleCreateWorkoutClick}
                   className="px-6 py-3 rounded-xl bg-emerald-500 hover:bg-emerald-400 text-slate-950 text-xs font-bold flex items-center gap-2 transition active:scale-95 shadow-[0_0_15px_rgba(16,185,129,0.3)] cursor-pointer"
                 >
                   <Plus size={16} strokeWidth={2.5} />
@@ -447,6 +459,12 @@ export default function Workouts() {
           </div>
         </div>
       )}
+
+      <AuthRequiredModal
+        isOpen={authModalOpen}
+        onClose={() => setAuthModalOpen(false)}
+        feature="workout"
+      />
     </div>
   );
 }

@@ -1,7 +1,9 @@
-import React, { useEffect, useState } from 'react';
+import React, { useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
-import { Plus, Dumbbell, Save, ArrowLeft, AlertCircle } from 'lucide-react';
+import { Plus, Dumbbell, Save, ArrowLeft, AlertCircle, Lock } from 'lucide-react';
 import { useWorkouts } from '../hooks/useWorkouts';
+import { useAuth } from '../context/AuthContext';
+import AuthRequiredModal from '../components/common/AuthRequiredModal';
 import { MUSCLE_GROUPS } from '../data/exercises';
 import ExerciseSelectorModal from '../components/workout/ExerciseSelectorModal';
 import WorkoutExerciseConfig from '../components/workout/WorkoutExerciseConfig';
@@ -9,6 +11,8 @@ import WorkoutExerciseConfig from '../components/workout/WorkoutExerciseConfig';
 export default function CreateWorkout() {
   const navigate = useNavigate();
   const { id } = useParams();
+  const { user } = useAuth();
+  const [authModalOpen, setAuthModalOpen] = useState(false);
   const { createWorkout, updateWorkout, getWorkoutById } = useWorkouts();
 
   const isEditing = Boolean(id);
@@ -22,18 +26,20 @@ export default function CreateWorkout() {
   const [selectedExercises, setSelectedExercises] = useState(
     () => existingWorkout?.exercises || []
   );
-  useEffect(() => {
-    if (!isEditing || !existingWorkout) return;
-
-    setName(existingWorkout.name || '');
-    setDescription(existingWorkout.description || '');
-    setTargetMuscle(
-      existingWorkout.targetMuscle ||
-      existingWorkout.muscleGroup ||
-      'Chest'
-    );
-    setSelectedExercises(existingWorkout.exercises || []);
-  }, [isEditing, existingWorkout]);
+  const [prevId, setPrevId] = useState(id);
+  if (id !== prevId) {
+    setPrevId(id);
+    if (isEditing && existingWorkout) {
+      setName(existingWorkout.name || '');
+      setDescription(existingWorkout.description || '');
+      setTargetMuscle(
+        existingWorkout.targetMuscle ||
+        existingWorkout.muscleGroup ||
+        'Chest'
+      );
+      setSelectedExercises(existingWorkout.exercises || []);
+    }
+  }
   const [selectorOpen, setSelectorOpen] = useState(false);
   const [errorMessage, setErrorMessage] = useState('');
 
@@ -95,6 +101,11 @@ export default function CreateWorkout() {
     e.preventDefault();
     setErrorMessage('');
 
+    if (!user?.id) {
+      setAuthModalOpen(true);
+      return;
+    }
+
     if (!name.trim()) {
       setErrorMessage('Please provide a workout routine name.');
       return;
@@ -150,6 +161,22 @@ export default function CreateWorkout() {
         <div className="mb-6 p-3.5 rounded-xl bg-rose-500/10 border border-rose-500/25 flex items-center gap-2 text-rose-400 text-xs">
           <AlertCircle size={16} className="shrink-0" />
           <span>{errorMessage}</span>
+        </div>
+      )}
+
+      {!user?.id && (
+        <div className="mb-6 p-4 rounded-2xl bg-amber-500/10 border border-amber-500/25 flex items-center justify-between gap-4 flex-wrap">
+          <div className="flex items-center gap-2.5 text-xs text-amber-300">
+            <Lock size={16} className="shrink-0 text-amber-400" />
+            <span>You are configuring a workout routine in guest mode. Sign in to save custom workouts to your profile.</span>
+          </div>
+          <button
+            type="button"
+            onClick={() => setAuthModalOpen(true)}
+            className="px-3.5 py-1.5 rounded-xl bg-amber-400 hover:bg-amber-300 text-slate-950 text-xs font-bold transition cursor-pointer shrink-0"
+          >
+            Sign In to Save
+          </button>
         </div>
       )}
 
@@ -290,6 +317,12 @@ export default function CreateWorkout() {
         onClose={() => setSelectorOpen(false)}
         onSelectExercise={handleSelectExercise}
         selectedExerciseIds={selectedExercises.map((e) => e.exerciseId)}
+      />
+
+      <AuthRequiredModal
+        isOpen={authModalOpen}
+        onClose={() => setAuthModalOpen(false)}
+        feature="workout"
       />
     </div>
   );
