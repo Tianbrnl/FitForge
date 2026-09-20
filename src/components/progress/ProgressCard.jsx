@@ -9,10 +9,15 @@ export default function ProgressCard({
   icon: Icon,
   trend,
   trendPositive = true,
-  accentColor = 'text-[#CCFF00]'
+  accentColor = 'text-[#CCFF00]',
+  onClick
 }) {
   return (
-    <Card className="p-5 flex flex-col justify-between">
+    <Card
+      onClick={onClick}
+      interactive={!!onClick}
+      className={`p-5 flex flex-col justify-between ${onClick ? 'cursor-pointer' : ''}`}
+    >
       <div className="flex justify-between items-start mb-3">
         <span className="text-xs font-semibold uppercase tracking-wider text-gray-400">
           {title}

@@ -23,6 +23,7 @@ import { useLocalStorage } from '../hooks/useLocalStorage';
 import { useWorkouts } from '../hooks/useWorkouts';
 import { useWorkoutHistory } from '../hooks/useWorkoutHistory';
 import { useWeightHistory } from '../hooks/useWeightHistory';
+import { useNutrition } from '../hooks/useNutrition';
 import { 
   calculateActiveStreak, 
   calculateWorkoutFrequency, 
@@ -37,6 +38,12 @@ export default function Dashboard() {
   const { history: workoutHistory } = useWorkoutHistory();
   const { weightHistory } = useWeightHistory();
   const { workouts } = useWorkouts();
+  const {
+    todayCaloriesConsumed,
+    dailyCalorieGoal: nutritionCalorieGoal,
+    caloriePercent: nutritionCaloriePercent,
+    caloriesRemaining
+  } = useNutrition();
   const [workoutModalOpen, setWorkoutModalOpen] = useState(false);
 
   // Authenticated user profile name
@@ -75,9 +82,6 @@ export default function Dashboard() {
         : (Number(w.duration) || 0);
       return sum + Math.round(durationMins * 8.5);
     }, 0);
-
-  const dailyCalorieGoal = userData?.metrics?.dailyCaloriesTarget || 500;
-  const caloriePercent = dailyCalorieGoal > 0 ? Math.round((todayCaloriesBurned / dailyCalorieGoal) * 100) : 0;
 
   // Workout statistics
   const currentStreak = calculateActiveStreak(workoutHistory);
@@ -133,17 +137,23 @@ export default function Dashboard() {
           subtitle={weightSubtitle}
           icon={Scale}
           accentColor="text-[#CCFF00]"
+          onClick={() => navigate('/progress')}
         />
 
         <ProgressCard
-          title="Calorie Burn"
-          value={todayCaloriesBurned}
+          title="Calorie Intake"
+          value={todayCaloriesConsumed}
           unit="kcal"
-          trend={`Goal: ${dailyCalorieGoal} kcal`}
-          trendPositive={todayCaloriesBurned > 0}
-          subtitle={todayCaloriesBurned > 0 ? `${caloriePercent}% achieved` : (weeklyFrequency.totalCaloriesBurned > 0 ? `This week: ${weeklyFrequency.totalCaloriesBurned} kcal` : 'No workouts logged today')}
+          trend={`Goal: ${nutritionCalorieGoal} kcal`}
+          trendPositive={todayCaloriesConsumed <= nutritionCalorieGoal}
+          subtitle={
+            todayCaloriesConsumed > 0
+              ? `${nutritionCaloriePercent}% achieved${todayCaloriesBurned > 0 ? ` • ${todayCaloriesBurned} kcal burned` : ` (${caloriesRemaining} kcal left)`}`
+              : (todayCaloriesBurned > 0 ? `${todayCaloriesBurned} kcal burned in workouts` : 'Log meals in Nutrition')
+          }
           icon={Flame}
           accentColor="text-[#FF6B4A]"
+          onClick={() => navigate('/nutrition')}
         />
 
         <ProgressCard
@@ -155,6 +165,7 @@ export default function Dashboard() {
           subtitle={weeklyFrequency.totalWorkouts >= weeklyWorkoutsGoal ? 'Weekly target reached! 🎯' : `${Math.max(0, weeklyWorkoutsGoal - weeklyFrequency.totalWorkouts)} remaining`}
           icon={Dumbbell}
           accentColor="text-[#00E5FF]"
+          onClick={() => navigate('/workouts')}
         />
 
         <ProgressCard
@@ -166,6 +177,7 @@ export default function Dashboard() {
           subtitle={currentStreak > 0 ? "Keep the flame lit" : "Complete a workout today"}
           icon={Zap}
           accentColor="text-amber-400"
+          onClick={() => navigate('/workouts')}
         />
       </div>
 
