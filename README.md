@@ -17,7 +17,8 @@ The application combines a React frontend with Supabase for authentication and u
 * 🧠 Sanity-powered exercise content management
 * 📱 Responsive modern interface
 * ☁️ Vercel deployment
-
+🎮 Live Demo
+https://fit-forge-seven-pi.vercel.app/
 ## Tech Stack
 
 ### Frontend
